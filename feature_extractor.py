@@ -18,14 +18,14 @@ class FeatureExtractor():
         self.normalization = None
 
 
-    def fit_transform(self, X_seq, term_weighting=None, normalization=None, min_count=1):
+    def fit_transform(self, X_seq, term_weighting=None, normalization=None):
         """ Fit and transform the data matrix
         Arguments
         ---------
             X_seq: ndarray, log sequences matrix
             term_weighting: None or `tf-idf`
             normalization: None or `zero-mean`
-            min_count: int, the minimal occurrence of events (default 0), only valid when oov=True.
+
         Returns
         -------
             X_new: The transformed data matrix
@@ -40,25 +40,34 @@ class FeatureExtractor():
 
         for i in range(len(X_seq)):
             event_counts = Counter(X_seq[i])
-            # print("X_seq[i]: ", X_seq[i])
-            # print("shape of event_counts: ", len(event_counts))
-            # print("event_counts: ", event_counts)
+            print("X_seq[",i,"]: ", X_seq[i])
+            print("length of event_counts: ", len(event_counts))
+            print("event_counts: ", event_counts)
             X_counts.append(event_counts)
+            # break
 
         print("Length of X_counts: ", len(X_counts))
+
         X_df = pd.DataFrame(X_counts)
-        # X_df = pd.DataFrame(X_seq)
         X_df = X_df.fillna(0)
-        print("X_df.columns: ", X_df.columns)
         self.events = X_df.columns
         X = X_df.values
 
+        # print("X_df.columns: ", X_df.columns)
+        # print("X_df values: ", X_df.values)
         num_instance, num_event = X.shape
+        print("num of instances: ", num_instance, " and num of events: ", num_event)
+        print("Shape of X: ", X.shape)
+        print("X: ", X)
+
         if self.term_weighting == 'tf-idf':
-            df_vec = np.sum(X > 0, axis=0)
+            print("Shape of X: ", X.shape)
+            df_vec = np.sum(X>0, axis=0) # axis = 0 are for columns
             print("df_vec: ", df_vec)
             print("shape of df_vec: ", df_vec.shape)
             self.idf_vec = np.log(num_instance / (df_vec + 1e-8))
+            print("Shape of idf_vec: ", self.idf_vec.shape)
+            print("np.tile shape: ", np.tile(self.idf_vec, (num_instance, 1)).shape)
             idf_matrix = X * np.tile(self.idf_vec, (num_instance, 1))
             X = idf_matrix
         if self.normalization == 'zero-mean':

@@ -73,3 +73,7 @@ if __name__ == "__main__":
     feature_extractor = FeatureExtractor()
     x_train = feature_extractor.fit_transform(x_train, term_weighting='tf-idf')
     print("X_train after transformation : ", x_train)
+    print("Shape of X_train after transformation : ", x_train.shape)
+    print("len of x_train[0]: ", len(x_train[0]))
+    print("\n values of x_train[0]: ", x_train[0])
+    print("\n values of x_train[344]: ", x_train[344])

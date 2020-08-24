@@ -70,7 +70,6 @@ def load_data(log_file, label_file=None, window='session', train_ratio=0.7, \
         # print("x_data: ", (x_data))
         print("The keys of dataframe: ", data_df.keys())
 
-        x_data = data_df['message'].values
         (x_train, _), (x_test, _) = _split_data(x_data, train_ratio=train_ratio, split_type=split_type)
         print('Total: {} instances, train: {} instances, test: {} instances'.format(
             x_data.shape[0], x_train.shape[0], x_test.shape[0]))
