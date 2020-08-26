@@ -65,15 +65,34 @@ def main():
 
 if __name__ == "__main__":
     # main()
-    # load_data('logs_lhcb.json')
+
     (x_train, y_train), (x_test, y_test) = load_data('logs_lhcb.json')
-    # print("Here is the x_train: ", x_train)
-    print("Shape of x_train: ", x_train.shape)
+
+    ############################################################################
+    ######################  Printing values  ###################################
+    print("Here is the x_train 0: ", (x_train[0]))
+    print("Here is the x_train 349: ", (x_train[349]))
+    print("Len of x_train: ", len(x_train))
+    print("Type of x_train: ", type(x_train))
+    print("type of x_train[0]: ", type(x_train[0]))
+    print("len of x_train[0]: ", len(x_train[0]))
+    # for i in range(len(x_train)):
+    #     print(i, len(x_train[i]))
+        # for j in range(len(x_train[i])):
+        #     print("x_train[",i,"][",j,"]")
+        # break
+    ###########################################################################
+    ###########################################################################
 
     feature_extractor = FeatureExtractor()
     x_train = feature_extractor.fit_transform(x_train, term_weighting='tf-idf')
+
+    ############################################################################
+    ######################  Printing values  ###################################
     print("X_train after transformation : ", x_train)
     print("Shape of X_train after transformation : ", x_train.shape)
     print("len of x_train[0]: ", len(x_train[0]))
     print("\n values of x_train[0]: ", x_train[0])
     print("\n values of x_train[344]: ", x_train[344])
+    ############################################################################
+

@@ -30,7 +30,7 @@ class FeatureExtractor():
         -------
             X_new: The transformed data matrix
         """
-        print('====== Transformed train data summary ======')
+        print('\n====== Transformed train data summary ======')
         self.term_weighting = term_weighting
         self.normalization = normalization
 
@@ -40,9 +40,9 @@ class FeatureExtractor():
 
         for i in range(len(X_seq)):
             event_counts = Counter(X_seq[i])
-            print("X_seq[",i,"]: ", X_seq[i])
-            print("length of event_counts: ", len(event_counts))
-            print("event_counts: ", event_counts)
+            # print("X_seq[",i,"]: ", X_seq[i])
+            # print("length of event_counts: ", len(event_counts))
+            # print("event_counts: ", event_counts)
             X_counts.append(event_counts)
             # break
 
@@ -58,16 +58,16 @@ class FeatureExtractor():
         num_instance, num_event = X.shape
         print("num of instances: ", num_instance, " and num of events: ", num_event)
         print("Shape of X: ", X.shape)
-        print("X: ", X)
+        # print("X: ", X)
 
         if self.term_weighting == 'tf-idf':
             print("Shape of X: ", X.shape)
             df_vec = np.sum(X>0, axis=0) # axis = 0 are for columns
-            print("df_vec: ", df_vec)
-            print("shape of df_vec: ", df_vec.shape)
+            # print("df_vec: ", df_vec)
+            # print("shape of df_vec: ", df_vec.shape)
             self.idf_vec = np.log(num_instance / (df_vec + 1e-8))
-            print("Shape of idf_vec: ", self.idf_vec.shape)
-            print("np.tile shape: ", np.tile(self.idf_vec, (num_instance, 1)).shape)
+            # print("Shape of idf_vec: ", self.idf_vec.shape)
+            # print("np.tile shape: ", np.tile(self.idf_vec, (num_instance, 1)).shape)
             idf_matrix = X * np.tile(self.idf_vec, (num_instance, 1))
             X = idf_matrix
         if self.normalization == 'zero-mean':
@@ -79,44 +79,4 @@ class FeatureExtractor():
         X_new = X
 
         print('Train data shape: {}-by-{}\n'.format(X_new.shape[0], X_new.shape[1]))
-        return X_new
-
-
-    def transform(self, X_seq):
-        """ Transform the data matrix with trained parameters
-        Arguments
-        ---------
-            X: log sequences matrix
-            term_weighting: None or `tf-idf`
-        Returns
-        -------
-            X_new: The transformed data matrix
-        """
-        print('====== Transformed test data summary ======')
-        X_counts = []
-        for i in range(X_seq.shape[0]):
-            event_counts = Counter(X_seq[i])
-            X_counts.append(event_counts)
-        X_df = pd.DataFrame(X_counts)
-        X_df = X_df.fillna(0)
-        empty_events = set(self.events) - set(X_df.columns)
-        for event in empty_events:
-            X_df[event] = [0] * len(X_df)
-        X = X_df[self.events].values
-        if self.oov:
-            oov_vec = np.sum(X_df[X_df.columns.difference(self.events)].values > 0, axis=1)
-            X = np.hstack([X, oov_vec.reshape(X.shape[0], 1)])
-
-        num_instance, num_event = X.shape
-        if self.term_weighting == 'tf-idf':
-            idf_matrix = X * np.tile(self.idf_vec, (num_instance, 1))
-            X = idf_matrix
-        if self.normalization == 'zero-mean':
-            X = X - np.tile(self.mean_vec, (num_instance, 1))
-        elif self.normalization == 'sigmoid':
-            X[X != 0] = expit(X[X != 0])
-        X_new = X
-
-        print('Test data shape: {}-by-{}\n'.format(X_new.shape[0], X_new.shape[1]))
-
         return X_new
