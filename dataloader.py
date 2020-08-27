@@ -5,7 +5,9 @@ import re
 import json
 from sklearn.utils import shuffle
 from collections import OrderedDict
-
+import seaborn as sns
+import matplotlib.pyplot as plt
+import umap
 
 def _split_data(x_data, y_data=None, train_ratio=0.7, split_type='uniform'):
 

@@ -80,3 +80,40 @@ class FeatureExtractor():
 
         print('Train data shape: {}-by-{}\n'.format(X_new.shape[0], X_new.shape[1]))
         return X_new
+
+
+    def transform(self, X_seq):
+        """ Transform the data matrix with trained parameters
+        Arguments
+        ---------
+            X: log sequences matrix
+            term_weighting: None or `tf-idf`
+        Returns
+        -------
+            X_new: The transformed data matrix
+        """
+        print('====== Transformed test data summary ======')
+        X_counts = []
+        for i in range(X_seq.shape[0]):
+            event_counts = Counter(X_seq[i])
+            X_counts.append(event_counts)
+        X_df = pd.DataFrame(X_counts)
+        X_df = X_df.fillna(0)
+        empty_events = set(self.events) - set(X_df.columns)
+        for event in empty_events:
+            X_df[event] = [0] * len(X_df)
+        X = X_df[self.events].values
+
+        num_instance, num_event = X.shape
+        if self.term_weighting == 'tf-idf':
+            idf_matrix = X * np.tile(self.idf_vec, (num_instance, 1))
+            X = idf_matrix
+        if self.normalization == 'zero-mean':
+            X = X - np.tile(self.mean_vec, (num_instance, 1))
+        elif self.normalization == 'sigmoid':
+            X[X != 0] = expit(X[X != 0])
+        X_new = X
+
+        print('Test data shape: {}-by-{}\n'.format(X_new.shape[0], X_new.shape[1]))
+
+        return X_new

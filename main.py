@@ -9,6 +9,13 @@ from sklearn.pipeline import Pipeline
 import json
 from dataloader import *
 from feature_extractor import *
+from svm_model import SVM
+import sklearn
+import matplotlib.pyplot as plt
+from pylab import savefig
+from sklearn.metrics import accuracy_score
+from sklearn.ensemble import IsolationForest
+from sklearn.model_selection import train_test_split
 
 def main():
     # reading the JSON data
@@ -86,6 +93,7 @@ if __name__ == "__main__":
 
     feature_extractor = FeatureExtractor()
     x_train = feature_extractor.fit_transform(x_train, term_weighting='tf-idf')
+    x_test = feature_extractor.transform(x_test)
 
     ############################################################################
     ######################  Printing values  ###################################
@@ -95,4 +103,48 @@ if __name__ == "__main__":
     print("\n values of x_train[0]: ", x_train[0])
     print("\n values of x_train[344]: ", x_train[344])
     ############################################################################
+
+    # Plot before return
+    print(plt.rcParams.get('figure.figsize'))
+
+    fig_size = plt.rcParams["figure.figsize"]
+
+    fig_size[0] = 10
+
+    fig_size[1] = 8
+
+    plt.rcParams["figure.figsize"] = fig_size
+    new_data = pd.DataFrame(np.array(x_train))
+    new_data.plot(style='o')
+    plt.show()
+
+    # print('Starting fitting Isolation Forests')
+    model = IsolationForest(n_estimators=10, warm_start=True)
+    model.fit(x_train)  # fit 10 trees
+    model.set_params(n_estimators=20)  # add 10 more trees
+    y_predictions = model.predict(x_test) # fit the added trees
+    print("Y: ", y_predictions )
+
+    print("Shape of x_test: ", x_test)
+    print("Shape of x_train: ", x_train.shape)
+    print("Shape of y: ", y_predictions.shape)
+
+
+
+
+    # new, 'normal' observations ----
+    print("Accuracy:", list(y_predictions).count(1) / y_predictions.shape[0])
+
+    # outliers ----
+    # print("Accuracy:", list(y_outliers).count(-1) / y_outliers.shape[0])
+
+
+    # model = SVM()
+    # model.fit(x_train, x_train[0] )
+
+    # print('Train validation:')
+    # precision, recall, f1 = model.evaluate(x_train, y_train)
+    #
+    # print('Test validation:')
+    # precision, recall, f1 = model.evaluate(x_test, y_test)
 
