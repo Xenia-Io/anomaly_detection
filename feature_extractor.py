@@ -1,11 +1,7 @@
 import pandas as pd
-import os
 import numpy as np
-import re
 from collections import Counter
 from scipy.special import expit
-from itertools import compress
-from torch.utils.data import DataLoader, Dataset
 
 
 class FeatureExtractor():
@@ -18,7 +14,7 @@ class FeatureExtractor():
         self.normalization = None
 
 
-    def fit_transform(self, X_seq, term_weighting=None, normalization=None):
+    def fit_transform(self, X_seq, term_weighting=None, normalization=None, printing=False):
         """ Fit and transform the data matrix
         Arguments
         ---------
@@ -35,18 +31,21 @@ class FeatureExtractor():
         self.normalization = normalization
 
         X_counts = []
-        print("Shape of X_seq: ", X_seq.shape)
-        print("len(X_seq): ", len(X_seq))
+
+        if printing:
+            print("Shape of X_seq: ", X_seq.shape)
+            print("len(X_seq): ", len(X_seq))
 
         for i in range(len(X_seq)):
             event_counts = Counter(X_seq[i])
-            # print("X_seq[",i,"]: ", X_seq[i])
-            # print("length of event_counts: ", len(event_counts))
-            # print("event_counts: ", event_counts)
             X_counts.append(event_counts)
-            # break
+            if printing:
+                print("X_seq[",i,"]: ", X_seq[i])
+                print("length of event_counts: ", len(event_counts))
+                print("event_counts: ", event_counts)
 
-        print("Length of X_counts: ", len(X_counts))
+        if printing:
+            print("Length of X_counts: ", len(X_counts))
 
         X_df = pd.DataFrame(X_counts)
         X_df = X_df.fillna(0)
@@ -56,18 +55,24 @@ class FeatureExtractor():
         # print("X_df.columns: ", X_df.columns)
         # print("X_df values: ", X_df.values)
         num_instance, num_event = X.shape
-        print("num of instances: ", num_instance, " and num of events: ", num_event)
-        print("Shape of X: ", X.shape)
-        # print("X: ", X)
+
+        if printing:
+            print("num of instances: ", num_instance, " and num of events: ", num_event)
+            print("Shape of X: ", X.shape)
+
 
         if self.term_weighting == 'tf-idf':
-            print("Shape of X: ", X.shape)
             df_vec = np.sum(X>0, axis=0) # axis = 0 are for columns
-            # print("df_vec: ", df_vec)
-            # print("shape of df_vec: ", df_vec.shape)
+
+            if printing:
+                print("df_vec: ", df_vec)
+                print("shape of df_vec: ", df_vec.shape)
             self.idf_vec = np.log(num_instance / (df_vec + 1e-8))
-            # print("Shape of idf_vec: ", self.idf_vec.shape)
-            # print("np.tile shape: ", np.tile(self.idf_vec, (num_instance, 1)).shape)
+
+            if printing:
+                print("Shape of idf_vec: ", self.idf_vec.shape)
+                print("np.tile shape: ", np.tile(self.idf_vec, (num_instance, 1)).shape)
+
             idf_matrix = X * np.tile(self.idf_vec, (num_instance, 1))
             X = idf_matrix
         if self.normalization == 'zero-mean':
