@@ -4,14 +4,15 @@ import json
 from sklearn.utils import shuffle
 import matplotlib.pyplot as plt
 from feature_extractor import FeatureExtractor
-
+import re
 
 class Preprocessor():
 
     def preprocessing(self, filename, printing=False):
 
         # Load the dataset
-        (self.x_train, self.y_train), (self.x_test, self.y_test) = self.load_data(filename)
+        (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
+        print(self.x_train[320])
 
         if printing:
             print("Shape of x_train: ", type(self.x_train[0]), self.x_train.shape)
@@ -26,6 +27,7 @@ class Preprocessor():
 
         # Finding outliers
         self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
+        # print("x_all: ", self.x_all)
 
         self.find_outliers(self.x_all)
 
@@ -117,7 +119,7 @@ class Preprocessor():
                 print("\n outlier index: ", index, " with message: ", self.x_all_dict[index])
                 print(self.x_all_copied[index])
 
-        plt.show()
+        # plt.show()
 
         # return self.x_all_dict, self.x_all_copied, self.x_all_trans, x_all_median, all_data, outliers, outliers_idx
 
@@ -176,9 +178,20 @@ class Preprocessor():
                 for item in range(len(data['responses'][0]['hits']['hits'])):
                     sources_list.append(data['responses'][0]['hits']['hits'][item]['_source'])
 
+
             # Build my dataframe
             data_df = pd.DataFrame(sources_list)
             x_data = data_df['message'].values
+            print("x_data shape: ", x_data.shape)
+
+            for i in range(x_data.shape[0]):
+                # print(i, x_data[i])
+                x_data[i] = re.sub("[\(\[].*?[\)\]]", "", x_data[i])
+                x_data[i] = ''.join([i for i in x_data[i] if not i.isdigit()])
+                # print(i, x_data[i])
+
+            data_df['message'] = x_data
+            # print("here: ", data_df['message'])
 
             if printing:
                 print("type of x_data: ", type(x_data))
@@ -198,7 +211,7 @@ class Preprocessor():
 
             # print("Sum for train and test instances: ", x_train.sum(), x_test.sum())
 
-            return (x_train, None), (x_test, None)
+            return (x_train, None), (x_test, None), data_df
 
         else:
             raise NotImplementedError('load_data() only support json files!')
