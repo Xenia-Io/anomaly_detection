@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from sklearn.ensemble import IsolationForest
 from preprocessor import Preprocessor
 from isolation_forest_model import IsolationForest
-
+from sklearn.metrics import roc_curve, precision_recall_curve, auc
 
 
 class IsolationForest_tester():
@@ -12,6 +12,54 @@ class IsolationForest_tester():
 
         self.epochs = epochs
         self.n_batch = n_batch
+
+    def run(self):
+        preprocessor = Preprocessor()
+        preprocessor.preprocessing('logs_lhcb.json')
+
+        print('Starting fitting Isolation Forests')
+
+        model = IsolationForest(contamination=0.03)
+
+        print("Shape of x_test: ", preprocessor.x_test.shape)
+        print("Shape of x_train[0].shape: ", preprocessor.x_train.shape[0])  # 350
+        print("x_train[300]: ", preprocessor.x_train[300])
+
+        model.fit(preprocessor.x_train)
+
+        scoring = -model.decision_function(preprocessor.x_test)  # the lower,the more normal
+        # print("scoring: ", scoring)
+        y_pred_test = model.predict(preprocessor.x_test)
+        fpr, tpr, thresholds = roc_curve(y_pred_test, scoring)
+
+        precision, recall = precision_recall_curve(y_pred_test, scoring)[:2]
+
+        print("precision : ", precision)
+        print("recall: ", recall)
+
+        AUC = auc(fpr, tpr)
+        AUPR = auc(recall, precision)
+
+        plt.subplot(121)
+        plt.plot(fpr, tpr, lw=1, label='%s (area = %0.3f)' % ("Isolation Forest", AUC))
+        plt.xlim([-0.05, 1.05])
+        plt.ylim([-0.05, 1.05])
+        plt.xlabel('False Positive Rate', fontsize=25)
+        plt.ylabel('True Positive Rate', fontsize=25)
+        plt.title('ROC curve', fontsize=25)
+        plt.legend(loc="lower right", prop={'size': 12})
+
+        plt.subplot(122)
+        plt.plot(recall, precision, lw=1, label='%s (area = %0.3f)'
+                                                % ("Isolation Forest", AUPR))
+        plt.xlim([-0.05, 1.05])
+        plt.ylim([-0.05, 1.05])
+        plt.xlabel('Recall', fontsize=25)
+        plt.ylabel('Precision', fontsize=25)
+        plt.title('PR curve', fontsize=25)
+        plt.legend(loc="lower right", prop={'size': 12})
+
+        plt.show()
 
 
     def run_test(self):
