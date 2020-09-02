@@ -1,12 +1,12 @@
-from isolation_forest_test import IsolationForest_tester
+from build_tests import Tester
 
 
 def main():
-    tester = IsolationForest_tester(20, 35)
+    tester = Tester(20, 35)
     # tester.run_test()
     # tester.run()
-    # tester.run_test_isoForest()
-    tester.run_kMeans()
+    tester.run_isoForest()
+    # tester.run_kMeans()
 
 if __name__ == "__main__":
     main()

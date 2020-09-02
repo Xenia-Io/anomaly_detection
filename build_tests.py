@@ -9,28 +9,44 @@ from sklearn.ensemble import IsolationForest
 import matplotlib.cm as cm
 from sklearn.cluster import KMeans
 
-class IsolationForest_tester():
+class Tester():
 
     def __init__(self, epochs, n_batch):
 
         self.epochs = epochs
         self.n_batch = n_batch
 
-    def run_isoForrest(self):
+    def run_isoForest(self):
         preprocessor = Preprocessor()
         preprocessor.preprocessing('logs_lhcb.json')
 
+        print("x_train shape: ", preprocessor.x_train.shape)
+
         print('Starting fitting Isolation Forests')
+        model = IsolationForest(contamination=0.03)
+        cluster_labels = model.fit_predict(preprocessor.x_train)
+
+        # The silhouette_score gives the average value for all the samples.
+        # This gives a perspective into the density and separation of the formed
+        # clusters
+        silhouette_avg = silhouette_score(preprocessor.x_train, cluster_labels)
+        print("The average silhouette_score is :", silhouette_avg)
+
+        # Compute the silhouette scores for each sample: shape=(350,)
+        sample_silhouette_values = silhouette_samples(preprocessor.x_train, cluster_labels)
+
+        print("sample_silhouette_values: " , sample_silhouette_values.shape)
 
 
     def run_kMeans(self):
         preprocessor = Preprocessor()
         preprocessor.preprocessing('logs_lhcb.json')
 
-        print('Starting fitting Isolation Forests')
+        print('Starting fitting KMeans model')
         # Use silhouette score
         # range_n_clusters = list(range(0, 2))
-        range_n_clusters = [2, 3, 4, 5, 6, 10, 20]
+        # range_n_clusters = [2, 3, 4, 5, 6, 10, 20]
+        range_n_clusters = [2,3,4,5,6]
         print("Number of clusters: \n", range_n_clusters)
         print(preprocessor.x_train[349])
 
@@ -40,13 +56,6 @@ class IsolationForest_tester():
         # print(preprocessor.x_train[300])
 
         for n_clusters in range_n_clusters:
-            # clusterer = IsolationForest(contamination=0.03)
-            #
-            # preds = clusterer.fit_predict(preprocessor.x_train)
-            # # centers = clusterer.cluster_centers_
-            #
-            # score = silhouette_score(preprocessor.x_train, preds)
-            # print("For n_clusters = {}, silhouette score is {})".format(n_clusters, score))
 
             # Create a subplot with 1 row and 2 columns
             fig, (ax1, ax2) = plt.subplots(1, 2)
@@ -106,11 +115,11 @@ class IsolationForest_tester():
             ax1.axvline(x=silhouette_avg, color="red", linestyle="--")
 
             ax1.set_yticks([])  # Clear the yaxis labels / ticks
-            ax1.set_xticks([-0.1, 0, 0.2, 0.4, 0.6, 0.8, 1])
+            ax1.set_xticks([-0.5, -0.1, 0, 0.2, 0.4, 0.6, 0.8, 1])
 
             # 2nd Plot showing the actual clusters formed
             colors = cm.nipy_spectral(cluster_labels.astype(float) / n_clusters)
-            ax2.scatter(preprocessor.x_train[:, 0], preprocessor.x_train[:, 1], marker='.', s=30, lw=0, alpha=0.7,
+            ax2.scatter(preprocessor.x_train[:, 0], preprocessor.x_train[:, 1], marker='.', s=130, lw=0, alpha=0.9,
                         c=colors, edgecolor='k')
 
             # Labeling the clusters
@@ -133,10 +142,6 @@ class IsolationForest_tester():
                          fontsize=14, fontweight='bold')
 
         plt.show()
-
-
-
-
 
 
     def run(self):
