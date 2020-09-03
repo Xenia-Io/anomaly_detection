@@ -5,8 +5,9 @@ def main():
     tester = Tester(20, 35)
     # tester.run_test()
     # tester.run()
-    tester.run_isoForest()
-    # tester.run_kMeans()
+    # tester.run_isoForest()
+    tester.run_kMeans()
+    # tester.run_kMedians()
 
 if __name__ == "__main__":
     main()
