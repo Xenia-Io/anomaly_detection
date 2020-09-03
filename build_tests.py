@@ -68,14 +68,13 @@ class Tester():
             # plots of individual clusters, to demarcate them clearly.
             ax1.set_ylim([0, len(preprocessor.x_all) + (n_clusters + 1) * 10])
 
-            # Initialize the clusterer with n_clusters value and a random generator
-            # seed of 10 for reproducibility.
+            # Initialize with n_clusters and a random generator seed for reproducibility
             clusterer = KMeans(n_clusters=n_clusters, random_state=10)
             cluster_labels = clusterer.fit_predict(preprocessor.x_all)
-            print("cluster_labels : ", cluster_labels)
+            # print("cluster_labels : ", cluster_labels)
+
             # The silhouette_score gives the average value for all the samples.
-            # This gives a perspective into the density and separation of the formed
-            # clusters
+            # This gives a perspective into the density and separation of the formed clusters
             silhouette_avg = silhouette_score(preprocessor.x_all, cluster_labels)
             print("For n_clusters =", n_clusters,
                   "The average silhouette_score is :", silhouette_avg)
