@@ -16,25 +16,24 @@ class Tester():
         self.epochs = epochs
         self.n_batch = n_batch
 
+
     def run_isoForest(self):
         preprocessor = Preprocessor()
         preprocessor.preprocessing('logs_lhcb.json')
 
-        print("x_train shape: ", preprocessor.x_train.shape)
+        print("x_all shape passed in iForest model: ", preprocessor.x_all.shape)
 
         print('Starting fitting Isolation Forests')
         model = IsolationForest(contamination=0.03)
-        cluster_labels = model.fit_predict(preprocessor.x_train)
+        cluster_labels = model.fit_predict(preprocessor.x_all)
 
         # The silhouette_score gives the average value for all the samples.
-        # This gives a perspective into the density and separation of the formed
-        # clusters
-        silhouette_avg = silhouette_score(preprocessor.x_train, cluster_labels)
+        # This gives a perspective into the density and separation of the formed clusters
+        silhouette_avg = silhouette_score(preprocessor.x_all, cluster_labels)
         print("The average silhouette_score is :", silhouette_avg)
 
         # Compute the silhouette scores for each sample: shape=(350,)
-        sample_silhouette_values = silhouette_samples(preprocessor.x_train, cluster_labels)
-
+        sample_silhouette_values = silhouette_samples(preprocessor.x_all, cluster_labels)
         print("sample_silhouette_values: " , sample_silhouette_values.shape)
 
 
@@ -44,11 +43,11 @@ class Tester():
 
         print('Starting fitting KMeans model')
         # Use silhouette score
-        # range_n_clusters = list(range(0, 2))
         # range_n_clusters = [2, 3, 4, 5, 6, 10, 20]
         range_n_clusters = [2,3,4,5,6]
         print("Number of clusters: \n", range_n_clusters)
-        print(preprocessor.x_train[349])
+        print(preprocessor.x_all[499])
+        print("shape of x_all passed in the model: ", preprocessor.x_all.shape)
 
         # for i in range(preprocessor.x_train.shape[0]):
         #     for j in range(preprocessor.x_train.shape[1]):
@@ -67,22 +66,22 @@ class Tester():
             ax1.set_xlim([-0.1, 1])
             # The (n_clusters+1)*10 is for inserting blank space between silhouette
             # plots of individual clusters, to demarcate them clearly.
-            ax1.set_ylim([0, len(preprocessor.x_train) + (n_clusters + 1) * 10])
+            ax1.set_ylim([0, len(preprocessor.x_all) + (n_clusters + 1) * 10])
 
             # Initialize the clusterer with n_clusters value and a random generator
             # seed of 10 for reproducibility.
             clusterer = KMeans(n_clusters=n_clusters, random_state=10)
-            cluster_labels = clusterer.fit_predict(preprocessor.x_train)
+            cluster_labels = clusterer.fit_predict(preprocessor.x_all)
             print("cluster_labels : ", cluster_labels)
             # The silhouette_score gives the average value for all the samples.
             # This gives a perspective into the density and separation of the formed
             # clusters
-            silhouette_avg = silhouette_score(preprocessor.x_train, cluster_labels)
+            silhouette_avg = silhouette_score(preprocessor.x_all, cluster_labels)
             print("For n_clusters =", n_clusters,
                   "The average silhouette_score is :", silhouette_avg)
 
             # Compute the silhouette scores for each sample
-            sample_silhouette_values = silhouette_samples(preprocessor.x_train, cluster_labels)
+            sample_silhouette_values = silhouette_samples(preprocessor.x_all, cluster_labels)
 
             y_lower = 10
             for i in range(n_clusters):
@@ -119,7 +118,7 @@ class Tester():
 
             # 2nd Plot showing the actual clusters formed
             colors = cm.nipy_spectral(cluster_labels.astype(float) / n_clusters)
-            ax2.scatter(preprocessor.x_train[:, 0], preprocessor.x_train[:, 1], marker='.', s=130, lw=0, alpha=0.9,
+            ax2.scatter(preprocessor.x_all[:, 0], preprocessor.x_all[:, 1], marker='.', s=130, lw=0, alpha=0.9,
                         c=colors, edgecolor='k')
 
             # Labeling the clusters

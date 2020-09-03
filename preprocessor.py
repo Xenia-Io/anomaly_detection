@@ -4,124 +4,46 @@ import json
 from sklearn.utils import shuffle
 import matplotlib.pyplot as plt
 from feature_extractor import FeatureExtractor
+from sklearn.decomposition import IncrementalPCA, PCA
+from sklearn.preprocessing import StandardScaler
 import re
 
 class Preprocessor():
 
-    def preprocessing(self, filename, printing=False):
+    def preprocessing(self, filename, printing=True):
 
-        # Load the dataset
+        # Load the dataset and split it
         (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
-        print(self.x_train[320])
+        print("Sample message after cleaning the messages: ", self.x_train[320])
 
-        if printing:
-            print("Shape of x_train: ", type(self.x_train[0]), self.x_train.shape)
-            print("Here is the x_train 349: ", (self.x_train[349]))
-            print("Len of x_train: ", len(self.x_train))
-            print("Type of x_train: ", type(self.x_train))
-            print("type of x_train[0]: ", type(self.x_train[0]))
-            print("len of x_train[0]: ", len(self.x_train[0]))
-
-        ###########################################################################
-        ###########################################################################
-
-        # Finding outliers
+        # get the whole dataset if no need to split it
         self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
-        # print("x_all: ", self.x_all)
-
-        self.find_outliers(self.x_all)
 
         feature_extractor = FeatureExtractor()
-        self.x_train = feature_extractor.fit_transform(self.x_train, term_weighting='tf-idf')  # Train data shape: 350-by-80
-        self.x_test = feature_extractor.transform(np.array(self.x_test))  # Test data shape: 150-by-80
-        self.x_outliers = feature_extractor.fit_transform(self.outliers.astype(np.str), term_weighting='tf-idf')
+        self.x_all = feature_extractor.fit_transform(self.x_all, term_weighting='tf-idf') # x_all shape: (500, 67)
+        self.x_train = feature_extractor.fit_transform(self.x_train, term_weighting='tf-idf')  #x_train shape: (350,67)
+        self.x_test = feature_extractor.transform(np.array(self.x_test))  # Test data shape: (150, 67)
 
-        # reshape x_outliers if needed
-        if (self.x_outliers[0].shape[0]) != (self.x_train[0].shape[0]):
-            n = np.abs(len(self.x_outliers[0]) - len(self.x_train[0]))
-            z = np.zeros((len(self.x_outliers), n), dtype=self.x_outliers.dtype)
-            self.x_outliers = np.concatenate((self.x_outliers, z), axis=1)
+        # Apply dimensionality reduction
+        self.apply_PCA()
 
 
-    def find_outliers(self, x_all, printing=False):
+    def apply_PCA(self):
+        scaler = StandardScaler()
 
-        if printing:
-            print("x_all shape: ", x_all.shape)
-            print("x_all[0]: ", x_all[0])
-            print("x_all[200]: ", x_all[200])
+        # Fit on training set only.
+        scaler.fit(self.x_all)
 
-        # Create dictionary to save message index and the corresponding message
-        self.x_all_dict = {}
+        # Apply transform to both the training set and the test set.
+        self.x_all = scaler.transform(self.x_all)
+        self.x_train = scaler.transform(self.x_train)
+        self.x_test = scaler.transform(self.x_test)
 
-        for i in range(len(x_all)):
-            self.x_all_dict[i] = x_all[i]
-
-        # Copy X array
-        self.x_all_copied = np.empty_like(x_all)
-        self.x_all_copied[:] = x_all
-
-        if printing:
-            print("Length of x_all_dict: ", len(self.x_all_dict))
-            print("x_all_copied[0]: ", self.x_all_copied[0])
-            print("x_all_copied[200]: ", self.x_all_copied[200])
-
-        feature_extractor = FeatureExtractor()
-        self.x_all_trans = feature_extractor.fit_transform(x_all, term_weighting='tf-idf')
-
-        # For each message get the median value for all of its events
-        self.x_all_median = []
-        for i in range(len(self.x_all_trans)):
-            self.x_all_median.append(np.median(self.x_all_trans[i]))
-
-        # print(x_all_dict)
-
-        if printing:
-            print("x_all_median type: ", type(self.x_all_median))
-            print("x_all_median length: ", len(self.x_all_median))
-
-        if printing:
-            print("x_all shape after transformation: ", self.x_all_trans.shape)  # x_all shape after transformation:
-
-        # Plot
-        self.all_data = pd.DataFrame(np.array(self.x_all_median), columns=['events'])
-
-        if printing:
-            print("Keys of all_data dataframe: ", self.all_data.keys())
-            print("The all_data dataframe: ", self.all_data)
-            print(self.all_data.columns)
-
-        plt.plot(np.array(self.x_all_median))
-        plt.xlabel('messages')
-        plt.ylabel('events')
-
-        if printing:
-            print("all_data shape: ", self.all_data.shape)  # all_data shape:  (500, 1)
-
-        maxInColumns = np.amax(self.x_all_median, axis=0)
-        max_idx = np.argmax(self.x_all_median)
-
-        if printing:
-            print(maxInColumns, max_idx)
-
-        self.x_all_median = np.array(self.x_all_median)
-
-        self.outliers = self.x_all_median[self.x_all_median > 0.07]
-        self.outliers_idx = np.nonzero(self.x_all_median > 0.07)
-
-        if printing:
-            print("Values bigger than 0.07 :", self.outliers)
-            print("Their indices are :", self.outliers_idx)
-            print("The actual messages that are considered as outliers: ")
-
-        for j in range(len(list(self.outliers_idx[0]))):
-            index = list(self.outliers_idx[0])[j]
-            if printing:
-                print("\n outlier index: ", index, " with message: ", self.x_all_dict[index])
-                print(self.x_all_copied[index])
-
-        # plt.show()
-
-        # return self.x_all_dict, self.x_all_copied, self.x_all_trans, x_all_median, all_data, outliers, outliers_idx
+        # Make an instance of the Model
+        pca = PCA(n_components=2)
+        pca.fit(self.x_all)
+        self.x_all = pca.transform(self.x_all)
+        print("Number of components PCA choose after fitting: ", pca.n_components_)
 
 
     def _split_data(self, x_data, y_data=None, train_ratio=0.7, split_type='uniform'):
@@ -215,3 +137,128 @@ class Preprocessor():
 
         else:
             raise NotImplementedError('load_data() only support json files!')
+
+
+
+
+    ######################### TO BE REMOVED LATER - MAYBE ###############################
+    def preprocessing_old(self, filename, printing=False):
+
+        # Load the dataset
+        (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
+        print("Sample message after cleaning the messages: ", self.x_train[320])
+
+        if printing:
+            print("Shape of x_train: ", type(self.x_train[0]), self.x_train.shape)
+            print("Here is the x_train 349: ", (self.x_train[349]))
+            print("Len of x_train: ", len(self.x_train))
+            print("Type of x_train: ", type(self.x_train))
+            print("type of x_train[0]: ", type(self.x_train[0]))
+            print("len of x_train[0]: ", len(self.x_train[0]))
+
+        ###########################################################################
+        ###########################################################################
+
+        # Finding outliers
+        self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
+        # print("x_all: ", self.x_all)
+
+        self.find_outliers(self.x_all)
+
+        feature_extractor = FeatureExtractor()
+        self.x_all = feature_extractor.fit_transform(self.x_all, term_weighting='tf-idf')
+        self.x_train = feature_extractor.fit_transform(self.x_train, term_weighting='tf-idf')  # Train data shape: 350-by-80
+        self.x_test = feature_extractor.transform(np.array(self.x_test))  # Test data shape: 150-by-80
+        self.x_outliers = feature_extractor.fit_transform(self.outliers.astype(np.str), term_weighting='tf-idf')
+
+        # reshape x_outliers if needed
+        if (self.x_outliers[0].shape[0]) != (self.x_train[0].shape[0]):
+            n = np.abs(len(self.x_outliers[0]) - len(self.x_train[0]))
+            z = np.zeros((len(self.x_outliers), n), dtype=self.x_outliers.dtype)
+            self.x_outliers = np.concatenate((self.x_outliers, z), axis=1)
+
+        # Apply dimensionality reduction
+        self.apply_PCA()
+
+
+    def find_outliers(self, x_all, printing=False):
+
+        if printing:
+            print("x_all shape: ", x_all.shape)
+            print("x_all[0]: ", x_all[0])
+            print("x_all[200]: ", x_all[200])
+
+        # Create dictionary to save message index and the corresponding message
+        self.x_all_dict = {}
+
+        for i in range(len(x_all)):
+            self.x_all_dict[i] = x_all[i]
+
+        # Copy X array
+        self.x_all_copied = np.empty_like(x_all)
+        self.x_all_copied[:] = x_all
+
+        if printing:
+            print("Length of x_all_dict: ", len(self.x_all_dict))
+            print("x_all_copied[0]: ", self.x_all_copied[0])
+            print("x_all_copied[200]: ", self.x_all_copied[200])
+
+        feature_extractor = FeatureExtractor()
+        self.x_all_trans = feature_extractor.fit_transform(x_all, term_weighting='tf-idf')
+
+        # For each message get the median value for all of its events
+        self.x_all_median = []
+        for i in range(len(self.x_all_trans)):
+            self.x_all_median.append(np.median(self.x_all_trans[i]))
+
+        # print(x_all_dict)
+
+        if printing:
+            print("x_all_median type: ", type(self.x_all_median))
+            print("x_all_median length: ", len(self.x_all_median))
+
+        if printing:
+            print("x_all shape after transformation: ", self.x_all_trans.shape)  # x_all shape after transformation:
+
+        # Plot
+        self.all_data = pd.DataFrame(np.array(self.x_all_median), columns=['events'])
+
+        if printing:
+            print("Keys of all_data dataframe: ", self.all_data.keys())
+            print("The all_data dataframe: ", self.all_data)
+            print(self.all_data.columns)
+
+        plt.plot(np.array(self.x_all_median))
+        plt.xlabel('messages')
+        plt.ylabel('events')
+
+        if printing:
+            print("all_data shape: ", self.all_data.shape)  # all_data shape:  (500, 1)
+
+        maxInColumns = np.amax(self.x_all_median, axis=0)
+        max_idx = np.argmax(self.x_all_median)
+
+        if printing:
+            print(maxInColumns, max_idx)
+
+        self.x_all_median = np.array(self.x_all_median)
+
+        self.outliers = self.x_all_median[self.x_all_median > 0.07]
+        self.outliers_idx = np.nonzero(self.x_all_median > 0.07)
+
+        if printing:
+            print("Values bigger than 0.07 :", self.outliers)
+            print("Their indices are :", self.outliers_idx)
+            print("The actual messages that are considered as outliers: ")
+
+        for j in range(len(list(self.outliers_idx[0]))):
+            index = list(self.outliers_idx[0])[j]
+            if printing:
+                print("\n outlier index: ", index, " with message: ", self.x_all_dict[index])
+                print(self.x_all_copied[index])
+
+        # plt.show()
+
+        # return self.x_all_dict, self.x_all_copied, self.x_all_trans, x_all_median, all_data, outliers, outliers_idx
+
+
