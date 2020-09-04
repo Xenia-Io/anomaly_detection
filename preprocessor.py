@@ -87,7 +87,7 @@ class Preprocessor():
 
         # Make an instance of the Model
         pca = PCA(n_components=2)
-        pca.fit(self.x_all)
+        # pca.fit(self.x_all)
         pca_result = pca.fit_transform(self.x_all)
         df = pd.DataFrame(np.array(x_all_median), columns=['events'])
         df['pca-one'] = pca_result[:, 0]
@@ -103,7 +103,60 @@ class Preprocessor():
             legend="full",
             alpha=0.4
         )
+
+
+        # t-SNE
+        np.random.seed(42)
+        rndperm = np.random.permutation(self.x_all_no_pca.shape[0])
+
+        # N = 500
+        # df_subset = df.loc[rndperm[:N], :].copy()
+        # data_subset = df_subset['events'].values
+        pca = PCA(n_components=3)
+        pca_result = pca.fit_transform(self.x_all_no_pca)
+        df['pca-one'] = pca_result[:, 0]
+        df['pca-two'] = pca_result[:, 1]
+        df['pca-three'] = pca_result[:, 2]
+        print('Explained variation per principal component: {}'.format(pca.explained_variance_ratio_))
+
+        time_start = time.time()
+        tsne = TSNE(n_components=2, verbose=1, perplexity=40, n_iter=300)
+        tsne_results = tsne.fit_transform(df['events'].values.reshape(-1, 1))
+        print('t-SNE done! Time elapsed: {} seconds'.format(time.time() - time_start))
+
+        df['tsne-2d-one'] = tsne_results[:, 0]
+        df['tsne-2d-two'] = tsne_results[:, 1]
+        plt.figure(figsize=(16, 10))
+        sns.scatterplot(
+            x="tsne-2d-one", y="tsne-2d-two",
+            palette=sns.color_palette("hls", 10),
+            data=df,
+            legend="full",
+            alpha=0.3
+        )
+
+        plt.figure(figsize=(16, 7))
+        ax1 = plt.subplot(1, 2, 1)
+        sns.scatterplot(
+            x="pca-one", y="pca-two",
+            palette=sns.color_palette("hls", 10),
+            data=df,
+            legend="full",
+            alpha=0.3,
+            ax=ax1
+        )
+        ax2 = plt.subplot(1, 2, 2)
+        sns.scatterplot(
+            x="tsne-2d-one", y="tsne-2d-two",
+            palette=sns.color_palette("hls", 10),
+            data=df,
+            legend="full",
+            alpha=0.3,
+            ax=ax2
+        )
+
         plt.show()
+
 
     def _split_data(self, x_data, y_data=None, train_ratio=0.7, split_type='uniform'):
 
