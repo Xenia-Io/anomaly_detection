@@ -161,7 +161,7 @@ class Tester():
             # Initialize with n_clusters and a random generator seed for reproducibility
             clusterer = KMeans(n_clusters=n_clusters, random_state=10)
             cluster_labels = clusterer.fit_predict(preprocessor.x_all)
-            print("cluster_labels : ", cluster_labels)
+            # print("cluster_labels : ", cluster_labels)
 
             # The silhouette_score gives the average value for all the samples.
             silhouette_avg = silhouette_score(preprocessor.x_all, cluster_labels)

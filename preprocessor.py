@@ -2,10 +2,15 @@ import pandas as pd
 import numpy as np
 import json
 from sklearn.utils import shuffle
-import matplotlib.pyplot as plt
 from feature_extractor import FeatureExtractor
 from sklearn.decomposition import IncrementalPCA, PCA
 from sklearn.preprocessing import StandardScaler
+import time
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import seaborn as sns
 import re
 
 class Preprocessor():
@@ -19,13 +24,22 @@ class Preprocessor():
         # get the whole dataset if no need to split it
         self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
 
+
         feature_extractor = FeatureExtractor()
         self.x_all = feature_extractor.fit_transform(self.x_all, term_weighting='tf-idf') # x_all shape: (500, 67)
         self.x_train = feature_extractor.fit_transform(self.x_train, term_weighting='tf-idf')  #x_train shape: (350,67)
         self.x_test = feature_extractor.transform(np.array(self.x_test))  # Test data shape: (150, 67)
 
+
+        self.x_all_no_pca = np.copy(self.x_all)
+        print("shape of copied x_all: ", self.x_all_no_pca.shape)
+        print("sample :: ", self.x_all_no_pca[0])
+        # Visualize data
+        self.visualize_inputs()
+
         # Apply dimensionality reduction
         self.apply_PCA()
+
 
 
     def apply_PCA(self):
@@ -45,6 +59,51 @@ class Preprocessor():
         self.x_all = pca.transform(self.x_all)
         print("Number of components PCA choose after fitting: ", pca.n_components_)
 
+
+    def visualize_inputs(self):
+        # For each message get the median value for all of its events
+        x_all_median = []
+        for i in range(len(self.x_all_no_pca)):
+            x_all_median.append(np.median(self.x_all_no_pca[i]))
+            print(x_all_median[i])
+
+        print("debug : ", len(x_all_median))
+        self.all_data = pd.DataFrame(np.array(x_all_median), columns=['events'])
+
+        print("Keys of all_data dataframe: ", self.all_data.keys())
+        print("The all_data dataframe: ", self.all_data)
+        print(self.all_data.columns)
+
+        plt.plot(np.array(self.all_data))
+        plt.xlabel('messages')
+        plt.ylabel('events')
+
+
+
+        scaler = StandardScaler()
+
+        scaler.fit(self.x_all)
+        self.x_all = scaler.transform(self.x_all)
+
+        # Make an instance of the Model
+        pca = PCA(n_components=2)
+        pca.fit(self.x_all)
+        pca_result = pca.fit_transform(self.x_all)
+        df = pd.DataFrame(np.array(x_all_median), columns=['events'])
+        df['pca-one'] = pca_result[:, 0]
+        df['pca-two'] = pca_result[:, 1]
+        print('Explained variation per principal component: {}'.format(pca.explained_variance_ratio_))
+        plt.figure(figsize=(16, 10))
+        colors = ["#FF0B04", "#4374B3"]  # Set your custom color palette
+
+        sns.scatterplot(
+            x="pca-one", y="pca-two",
+            palette=sns.set_palette(sns.color_palette(colors)),
+            data=df,
+            legend="full",
+            alpha=0.4
+        )
+        plt.show()
 
     def _split_data(self, x_data, y_data=None, train_ratio=0.7, split_type='uniform'):
 
@@ -257,7 +316,7 @@ class Preprocessor():
                 print("\n outlier index: ", index, " with message: ", self.x_all_dict[index])
                 print(self.x_all_copied[index])
 
-        # plt.show()
+        plt.show()
 
         # return self.x_all_dict, self.x_all_copied, self.x_all_trans, x_all_median, all_data, outliers, outliers_idx
 
