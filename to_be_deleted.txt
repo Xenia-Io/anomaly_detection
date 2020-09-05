@@ -74,3 +74,155 @@ def load_data2(log_file, label_file=None, window='session', train_ratio=0.7, \
 
     else:
         raise NotImplementedError('load_data() only support json files!')
+
+
+
+
+    # # Load the dataset
+    # (x_train, y_train), (x_test, y_test) = load_data('logs_lhcb.json')
+    #
+    # ############################################################################
+    # ######################  Printing values  ###################################
+    # print("Shape of x_train: ", type(x_train[0]), x_train.shape)
+    # # print("Here is the x_train 349: ", (x_train[349]))
+    # # print("Len of x_train: ", len(x_train))
+    # # print("Type of x_train: ", type(x_train))
+    # # print("type of x_train[0]: ", type(x_train[0]))
+    # # print("len of x_train[0]: ", len(x_train[0]))
+    #
+    # ###########################################################################
+    # ###########################################################################
+    #
+    # # Finding outliers
+    # x_all = np.concatenate((x_train, x_test), axis=0)
+    #
+    # x_all_dict,x_all_copied,x_all_trans,x_all_median,all_data_df,outliers, outliers_idx = find_outliers(x_all, False)
+    #
+    #
+    # feature_extractor = FeatureExtractor()
+    # x_train = feature_extractor.fit_transform(x_train, term_weighting='tf-idf')  # Train data shape: 350-by-80
+    # x_test = feature_extractor.transform(x_test)  # Test data shape: 150-by-80
+    # x_outliers = feature_extractor.fit_transform(outliers.astype(np.str), term_weighting='tf-idf')
+
+
+    ######################### TO BE REMOVED LATER - MAYBE ###############################
+    def preprocessing_old(self, filename, printing=False):
+
+        # Load the dataset
+        (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
+        print("Sample message after cleaning the messages: ", self.x_train[320])
+
+        if printing:
+            print("Shape of x_train: ", type(self.x_train[0]), self.x_train.shape)
+            print("Here is the x_train 349: ", (self.x_train[349]))
+            print("Len of x_train: ", len(self.x_train))
+            print("Type of x_train: ", type(self.x_train))
+            print("type of x_train[0]: ", type(self.x_train[0]))
+            print("len of x_train[0]: ", len(self.x_train[0]))
+
+        ###########################################################################
+        ###########################################################################
+
+        # Finding outliers
+        self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
+        # print("x_all: ", self.x_all)
+
+        self.find_outliers(self.x_all)
+
+        feature_extractor = FeatureExtractor()
+        self.x_all = feature_extractor.fit_transform(self.x_all, term_weighting='tf-idf')
+        self.x_train = feature_extractor.fit_transform(self.x_train, term_weighting='tf-idf')  # Train data shape: 350-by-80
+        self.x_test = feature_extractor.transform(np.array(self.x_test))  # Test data shape: 150-by-80
+        self.x_outliers = feature_extractor.fit_transform(self.outliers.astype(np.str), term_weighting='tf-idf')
+
+        # reshape x_outliers if needed
+        if (self.x_outliers[0].shape[0]) != (self.x_train[0].shape[0]):
+            n = np.abs(len(self.x_outliers[0]) - len(self.x_train[0]))
+            z = np.zeros((len(self.x_outliers), n), dtype=self.x_outliers.dtype)
+            self.x_outliers = np.concatenate((self.x_outliers, z), axis=1)
+
+        # Apply dimensionality reduction
+        self.apply_PCA()
+
+
+    def find_outliers(self, x_all, printing=False):
+
+        if printing:
+            print("x_all shape: ", x_all.shape)
+            print("x_all[0]: ", x_all[0])
+            print("x_all[200]: ", x_all[200])
+
+        # Create dictionary to save message index and the corresponding message
+        self.x_all_dict = {}
+
+        for i in range(len(x_all)):
+            self.x_all_dict[i] = x_all[i]
+
+        # Copy X array
+        self.x_all_copied = np.empty_like(x_all)
+        self.x_all_copied[:] = x_all
+
+        if printing:
+            print("Length of x_all_dict: ", len(self.x_all_dict))
+            print("x_all_copied[0]: ", self.x_all_copied[0])
+            print("x_all_copied[200]: ", self.x_all_copied[200])
+
+        feature_extractor = FeatureExtractor()
+        self.x_all_trans = feature_extractor.fit_transform(x_all, term_weighting='tf-idf')
+
+        # For each message get the median value for all of its events
+        self.x_all_median = []
+        for i in range(len(self.x_all_trans)):
+            self.x_all_median.append(np.median(self.x_all_trans[i]))
+
+        # print(x_all_dict)
+
+        if printing:
+            print("x_all_median type: ", type(self.x_all_median))
+            print("x_all_median length: ", len(self.x_all_median))
+
+        if printing:
+            print("x_all shape after transformation: ", self.x_all_trans.shape)  # x_all shape after transformation:
+
+        # Plot
+        self.all_data = pd.DataFrame(np.array(self.x_all_median), columns=['events'])
+
+        if printing:
+            print("Keys of all_data dataframe: ", self.all_data.keys())
+            print("The all_data dataframe: ", self.all_data)
+            print(self.all_data.columns)
+
+        plt.plot(np.array(self.x_all_median))
+        plt.xlabel('messages')
+        plt.ylabel('events')
+
+        if printing:
+            print("all_data shape: ", self.all_data.shape)  # all_data shape:  (500, 1)
+
+        maxInColumns = np.amax(self.x_all_median, axis=0)
+        max_idx = np.argmax(self.x_all_median)
+
+        if printing:
+            print(maxInColumns, max_idx)
+
+        self.x_all_median = np.array(self.x_all_median)
+
+        self.outliers = self.x_all_median[self.x_all_median > 0.07]
+        self.outliers_idx = np.nonzero(self.x_all_median > 0.07)
+
+        if printing:
+            print("Values bigger than 0.07 :", self.outliers)
+            print("Their indices are :", self.outliers_idx)
+            print("The actual messages that are considered as outliers: ")
+
+        for j in range(len(list(self.outliers_idx[0]))):
+            index = list(self.outliers_idx[0])[j]
+            if printing:
+                print("\n outlier index: ", index, " with message: ", self.x_all_dict[index])
+                print(self.x_all_copied[index])
+
+        plt.show()
+
+        # return self.x_all_dict, self.x_all_copied, self.x_all_trans, x_all_median, all_data, outliers, outliers_idx
+
+

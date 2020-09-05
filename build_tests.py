@@ -1,27 +1,25 @@
 from feature_extractor import *
 import matplotlib.pyplot as plt
-from sklearn.ensemble import IsolationForest
-from preprocessor import Preprocessor
-# from isolation_forest_model import IsolationForest
-from sklearn.metrics import roc_curve, precision_recall_curve, auc, roc_auc_score, silhouette_score, silhouette_samples
-from sklearn.preprocessing import StandardScaler
+from pre_processor import Preprocessor
+from sklearn.metrics import roc_curve, precision_recall_curve, auc, silhouette_score, silhouette_samples
 from sklearn.ensemble import IsolationForest
 import matplotlib.cm as cm
 from sklearn.cluster import KMeans
-# import sklearn_extensions as ske
 from sklearn_extensions.fuzzy_kmeans import KMedians
+
 
 class Tester():
 
-    def __init__(self, epochs, n_batch):
+    def __init__(self, epochs, n_batch, filename):
 
         self.epochs = epochs
         self.n_batch = n_batch
+        self.filename = filename
 
 
     def run_isoForest(self):
-        preprocessor = Preprocessor()
-        preprocessor.preprocessing('logs_lhcb.json')
+        preprocessor = Preprocessor(self.filename)
+        preprocessor.preprocessing()
 
         print("x_all shape passed in iForest model: ", preprocessor.x_all.shape)
 
@@ -39,10 +37,10 @@ class Tester():
         print("sample_silhouette_values: " , sample_silhouette_values.shape)
 
     def run_kMedians(self):
-        preprocessor = Preprocessor()
-        preprocessor.preprocessing('logs_lhcb.json')
+        preprocessor = Preprocessor(self.filename)
+        preprocessor.preprocessing()
 
-        print('Starting fitting K-Medians model')
+        print('Starting fitting K-Medians model', preprocessor.x_all.shape)
 
         # Use silhouette score
         range_n_clusters = [2, 3, 4, 5, 6, 10, 18, 20, 30, 40, 50, 67]
@@ -136,8 +134,8 @@ class Tester():
 
 
     def run_kMeans(self):
-        preprocessor = Preprocessor()
-        preprocessor.preprocessing('logs_lhcb.json')
+        preprocessor = Preprocessor(self.filename)
+        preprocessor.preprocessing()
 
         print('Starting fitting K-Means model')
         # Use silhouette score

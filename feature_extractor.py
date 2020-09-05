@@ -26,7 +26,7 @@ class FeatureExtractor():
         -------
             X_new: The transformed data matrix
         """
-        print('\n====== Transformed train data summary ======')
+        print('\n====== Transformed data summary ======')
         self.term_weighting = term_weighting
         self.normalization = normalization
 
