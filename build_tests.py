@@ -10,15 +10,16 @@ from sklearn_extensions.fuzzy_kmeans import KMedians
 
 class Tester():
 
-    def __init__(self, epochs, n_batch, filename):
+    def __init__(self, epochs, n_batch, filename, is_supervised=False):
 
         self.epochs = epochs
         self.n_batch = n_batch
         self.filename = filename
+        self.is_supervised = is_supervised
 
 
     def run_isoForest(self):
-        preprocessor = Preprocessor(self.filename)
+        preprocessor = Preprocessor(self.filename, self.is_supervised)
         preprocessor.preprocessing()
 
         print("x_all shape passed in iForest model: ", preprocessor.x_all.shape)
@@ -38,7 +39,7 @@ class Tester():
 
 
     def run_kMedians(self):
-        preprocessor = Preprocessor(self.filename)
+        preprocessor = Preprocessor(self.filename, self.is_supervised)
         preprocessor.preprocessing()
 
         print('Starting fitting K-Medians model', preprocessor.x_all.shape)
@@ -135,7 +136,7 @@ class Tester():
 
 
     def run_kMeans(self):
-        preprocessor = Preprocessor(self.filename)
+        preprocessor = Preprocessor(self.filename, self.is_supervised)
         preprocessor.preprocessing()
 
         print('Starting fitting K-Means model')

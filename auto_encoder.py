@@ -11,6 +11,8 @@ from tensorflow.keras.models import Model
 from tensorflow.python.keras.layers import RepeatVector, TimeDistributed
 from pre_processor import Preprocessor
 import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
 
 
 class Autoencoder():
@@ -43,11 +45,16 @@ class Autoencoder():
 
 
 if __name__ == "__main__":
+    # Preprocessing the dataset
     preprocessor = Preprocessor('logs_lhcb.json')
     preprocessor.preprocessing()
     print("debug 1: ", (preprocessor.x_all.shape), preprocessor.x_all.dtype)
+
+    # Reshape inputs
     preprocessor.x_all = preprocessor.x_all.reshape(preprocessor.x_all.shape[0], 1, preprocessor.x_all.shape[1])
     print("preprocessor.x_all shape in AUTO-ENCODER: ", preprocessor.x_all.shape)
+
+    # Build the model
     model_ = Autoencoder(optimizer='adam', loss='mae')
     model = model_.build_autoencoder(preprocessor.x_all)
     model.compile(optimizer='adam', loss='mae')

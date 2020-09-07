@@ -5,24 +5,29 @@ from sklearn.utils import shuffle
 from feature_extractor import FeatureExtractor
 from sklearn.preprocessing import StandardScaler
 import time
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection import train_test_split
+import warnings
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import axes3d, Axes3D
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import seaborn as sns
+import matplotlib.cm as cm
 import re
 
 
 class Preprocessor():
 
-    def __init__(self, filename):
+    def __init__(self, filename, supervised):
+        self.supervised = supervised
         (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
         self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
         self.x_all_trans_no_pca = []
         self.x_all_median = []
 
 
-    def preprocessing(self, printing=False, visualize=False):
+    def preprocessing(self, printing=False, visualize=True):
 
         feature_extractor = FeatureExtractor()
         self.x_all = feature_extractor.fit_transform(self.x_all, term_weighting='tf-idf') # x_all shape: (500, 67)
@@ -38,13 +43,21 @@ class Preprocessor():
             print("Sample of copied and un-transformed x_all: ", self.x_all_trans_no_pca[0])
 
         # Apply dimensionality reduction
+        if self.supervised:
+            self.x_train = self.apply_PCA(self.x_train)
+            self.x_test = self.apply_PCA(self.x_test)
         self.x_all = self.apply_PCA(self.x_all)
 
         # Visualization of the data
         if visualize:
-            self.visualize_simple_inputs()
-            self.visualize_pca_inputs()
-            self.visualize_tsne_inputs(self.x_all.shape[0])
+            if self.supervised:
+                self.visualize_simple_inputs()
+                self.visualize_pca_inputs_sup()
+                # self.visualize_tsne_inputs_sup(self.x_all.shape[0])
+            else:
+                self.visualize_simple_inputs()
+                self.visualize_pca_inputs()
+                self.visualize_tsne_inputs(self.x_all.shape[0])
 
 
     def load_data(self, log_file, label_file=None, window='session', train_ratio=0.7, \
@@ -67,50 +80,108 @@ class Preprocessor():
         print('====== Start loading the data ======')
 
         if log_file.endswith('.json'):
-            assert window == 'session', "Only window=session is supported for our dataset."
-            print("Loading", log_file)
+            if self.supervised:
+                print("Loading", log_file)
 
-            with open(log_file) as json_file:
-                data = json.load(json_file)
+                with open(log_file) as json_file:
+                    data = json.load(json_file)
+                    print("data shape = ", len(data))
 
-                # construct list of '_sources'
-                sources_list = []
-                for item in range(len(data['responses'][0]['hits']['hits'])):
-                    sources_list.append(data['responses'][0]['hits']['hits'][item]['_source'])
+                    # construct list of '_sources'
+                    dict_of_lists = {}
+                    messages = []
+                    labels = []
+                    for item in range(len(data['responses'][0]['hits']['hits'])):
+                        labels.append(data['responses'][0]['hits']['hits'][item]['_source']['wcc_severity'])
+                        messages.append(data['responses'][0]['hits']['hits'][item]['_source']['wcc_message'])
+                    dict_of_lists['messages'] = messages
+                    dict_of_lists['labels'] = labels
 
-            # Build my dataframe
-            data_df = pd.DataFrame(sources_list)
-            x_data = data_df['message'].values
-            print("x_data shape: ", x_data.shape)
+                # Build the dataframe
+                df = pd.DataFrame(dict_of_lists, columns=['messages', 'labels'])
+                x_data = df['messages'].values
 
-            for i in range(x_data.shape[0]):
-                # print(i, x_data[i])
-                x_data[i] = re.sub("[\(\[].*?[\)\]]", "", x_data[i])
-                x_data[i] = ''.join([i for i in x_data[i] if not i.isdigit()])
-                # print(i, x_data[i])
+                # Clean the messages from numbers and unwanted characters
+                for i in range(x_data.shape[0]):
+                    # print(i, x_data[i])
+                    x_data[i] = re.sub("[\(\[].*?[\)\]]", "", x_data[i])
+                    x_data[i] = ''.join([i for i in x_data[i] if not i.isdigit()])
+                    # print(i, x_data[i])
+                df['messages'] = x_data
 
-            data_df['message'] = x_data
-            # print("here: ", data_df['message'])
+                # Split train and test data
+                (x_train, y_train), (x_test, y_test) = self._split_data(x_data, y_data = df['labels'].values, \
+                                                                        train_ratio=train_ratio, split_type=split_type)
+                print('Total: {} instances, train: {} instances, test: {} instances'.format(
+                    x_data.shape[0], x_train.shape[0], x_test.shape[0]))
 
-            if printing:
-                print("type of x_data: ", type(x_data))
-                print("length of x_data[0]: ", len(x_data[0]))
-                print("length of x_data[499]: ", len(x_data[499]))
-                print("shape of x_data: ", x_data.shape)
-                print("The keys of dataframe: ", data_df.keys())
-                print("data_df: ", (data_df))
+                if save_csv:
+                    df.to_csv('data_instances.csv', index=False)
 
-            # Split train and test data
-            (x_train, _), (x_test, _) = self._split_data(x_data, train_ratio=train_ratio, split_type=split_type)
-            print('Total: {} instances, train: {} instances, test: {} instances'.format(
-                x_data.shape[0], x_train.shape[0], x_test.shape[0]))
+                # print("Sum for train and test instances: ", x_train.sum(), x_test.sum())
 
-            if save_csv:
-                data_df.to_csv('data_instances.csv', index=False)
+                # Update dataframe after shuffling
+                x_all_list = np.concatenate((x_train, x_test), axis=0)
+                y_all_list = np.concatenate((y_train, y_test), axis=0)
 
-            # print("Sum for train and test instances: ", x_train.sum(), x_test.sum())
+                df['messages'] = x_all_list
+                df['labels'] = y_all_list
 
-            return (x_train, None), (x_test, None), data_df
+                # Mapping labels into integers
+                mapping = {'INFO': 0, 'WARNING': 0, 'SEVERE': 1}
+                df = df.replace({'labels': mapping})
+
+                return (x_train, y_train), (x_test, y_test), df
+
+            else:
+                assert window == 'session', "Only window=session is supported for our dataset."
+                print("Loading", log_file)
+
+                with open(log_file) as json_file:
+                    data = json.load(json_file)
+
+                    # construct list of '_sources'
+                    sources_list = []
+                    for item in range(len(data['responses'][0]['hits']['hits'])):
+                        sources_list.append(data['responses'][0]['hits']['hits'][item]['_source'])
+
+                # Build my dataframe
+                data_df = pd.DataFrame(sources_list)
+                x_data = data_df['message'].values
+
+                # Clean the messages from numbers and unwanted characters
+                for i in range(x_data.shape[0]):
+                    # print(i, x_data[i])
+                    x_data[i] = re.sub("[\(\[].*?[\)\]]", "", x_data[i])
+                    x_data[i] = ''.join([i for i in x_data[i] if not i.isdigit()])
+                    # print(i, x_data[i])
+
+                data_df['message'] = x_data
+                # print("here: ", data_df['message'])
+
+                if printing:
+                    print("type of x_data: ", type(x_data))
+                    print("length of x_data[0]: ", len(x_data[0]))
+                    print("length of x_data[499]: ", len(x_data[499]))
+                    print("shape of x_data: ", x_data.shape)
+                    print("The keys of dataframe: ", data_df.keys())
+                    print("data_df: ", (data_df))
+
+                # Split train and test data
+                (x_train, _), (x_test, _) = self._split_data(x_data, train_ratio=train_ratio, split_type=split_type)
+                print('Total: {} instances, train: {} instances, test: {} instances'.format(
+                    x_data.shape[0], x_train.shape[0], x_test.shape[0]))
+
+                if save_csv:
+                    data_df.to_csv('data_instances.csv', index=False)
+
+                # print("Sum for train and test instances: ", x_train.sum(), x_test.sum())
+
+                # Update dataframe after shuffling
+                x_all_list = np.concatenate((x_train, x_test), axis=0)
+                data_df['message'] = x_all_list
+
+                return (x_train, None), (x_test, None), data_df
 
         else:
             raise NotImplementedError('load_data() only support json files!')
@@ -138,18 +209,19 @@ class Preprocessor():
         return (x_train, y_train), (x_test, y_test)
 
 
-    def apply_PCA(self, x_all):
+    def apply_PCA(self, X):
+        print("Starting Principal Components Analysis...")
         scaler = StandardScaler()
-        scaler.fit(x_all)
-        x_all = scaler.transform(x_all)
+        scaler.fit(X)
+        X = scaler.transform(X)
 
         # Make an instance of the Model
         pca = PCA(n_components=2)
-        pca.fit(x_all)
-        x_all = pca.transform(x_all)
+        pca.fit(X)
+        X = pca.transform(X)
         print("Number of components PCA choose after fitting: ", pca.n_components_)
 
-        return x_all
+        return X
 
 
     def visualize_simple_inputs(self):
@@ -167,15 +239,57 @@ class Preprocessor():
         plt.title("Input data after feature extraction")
         plt.show()
 
+    def visualize_pca_inputs_sup(self):
+        features = ['feature' + str(i) for i in range(self.x_all_trans_no_pca.shape[1])]
 
-    def visualize_pca_inputs(self):
-        # For re-producability of the results
-        features = ['pixel' + str(i) for i in range(self.x_all_trans_no_pca.shape[1])]
-        df = pd.DataFrame(self.x_all_trans_no_pca,columns=features)
-        print('Size of the dataframe: {}'.format(df.shape))
+        df = pd.DataFrame(self.x_all_trans_no_pca, columns=features)
+        df['y'] = self.df['labels']
+        df['label'] = df['y'].apply(lambda i: str(i))
+        print('Size of the dataframe: {}'.format(self.df.shape))
+
         np.random.seed(42)
         rndperm = np.random.permutation(df.shape[0])
 
+        pca = PCA(n_components=3)
+        pca_result = pca.fit_transform(df[features].values)
+        df['pca-one'] = pca_result[:, 0]
+        df['pca-two'] = pca_result[:, 1]
+        df['pca-three'] = pca_result[:, 2]
+        print('Explained variation per principal component: {}'.format(pca.explained_variance_ratio_))
+
+        colors = ["#ff0b04", "#4374b3"]  # Set your custom color palette
+        customPalette = sns.set_palette(sns.color_palette(colors))
+        plt.figure(figsize=(10, 10))
+        sns.scatterplot(x="pca-one", y="pca-two", hue="y", palette=customPalette,
+                        data=df.loc[rndperm, :], legend="full", alpha=0.3)
+        plt.title("Input data after PCA in 2d plot")
+        plt.show()
+
+        colors = {'0': 'red', '1': 'blue'}
+        ax = plt.figure(figsize=(10, 10)).gca(projection='3d')
+        ax.scatter(
+            xs = df.loc[rndperm, :]["pca-one"],
+            ys = df.loc[rndperm, :]["pca-two"],
+            zs = df.loc[rndperm, :]["pca-three"],c=df['label'].apply(lambda x: colors[x])
+        )
+
+        ax.set_xlabel('pca-one')
+        ax.set_ylabel('pca-two')
+        ax.set_zlabel('pca-three')
+        plt.title("Input data after PCA in 3d plot")
+        plt.show()
+
+    def visualize_pca_inputs(self):
+
+        features = ['feature' + str(i) for i in range(self.x_all_trans_no_pca.shape[1])]
+        df = pd.DataFrame(self.x_all_trans_no_pca,columns=features)
+        print('Size of the dataframe: {}'.format(df.shape))
+
+        # For re-producability of the results
+        np.random.seed(42)
+        rndperm = np.random.permutation(df.shape[0])
+
+        # Apply PCA
         pca = PCA(n_components=3)
         pca_result = pca.fit_transform(df[features].values)
         df['pca-one'] = pca_result[:, 0]
@@ -205,7 +319,7 @@ class Preprocessor():
 
     def visualize_tsne_inputs(self, N):
         # For re-producability of the results
-        features = ['pixel' + str(i) for i in range(self.x_all_trans_no_pca.shape[1])]
+        features = ['feature' + str(i) for i in range(self.x_all_trans_no_pca.shape[1])]
         df = pd.DataFrame(self.x_all_trans_no_pca, columns=features)
         print('Size of the dataframe: {}'.format(df.shape))
         np.random.seed(42)
@@ -227,7 +341,7 @@ class Preprocessor():
 
         df_subset['tsne-2d-one'] = tsne_results[:, 0]
         df_subset['tsne-2d-two'] = tsne_results[:, 1]
-        plt.figure(figsize=(16, 10))
+        plt.figure(figsize=(10, 10))
         sns.scatterplot(x="tsne-2d-one", y="tsne-2d-two",  palette=sns.color_palette("hls", 10),
                         data=df_subset, legend="full", alpha=0.3)
         plt.title("Input data after t-SNE in 2d plot")
