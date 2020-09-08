@@ -11,13 +11,15 @@ from tensorflow.keras.models import Model
 from tensorflow.python.keras.layers import RepeatVector, TimeDistributed
 from pre_processor import Preprocessor
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 import numpy as np
 
 
+
 class Autoencoder():
 
-    def __init__(self, epochs=10, optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,\
+    def __init__(self, epochs=100 , optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,\
                  epsilon=0, w_decay=0, momentum=0, dropout=0):
         self.optimizer = optimizer
         self.batch_size = batch_size
@@ -46,22 +48,23 @@ class Autoencoder():
 
 if __name__ == "__main__":
     # Preprocessing the dataset
-    preprocessor = Preprocessor('logs_lhcb.json')
+    preprocessor = Preprocessor('logs_for_supervised.json', True, False)
     preprocessor.preprocessing()
-    print("debug 1: ", (preprocessor.x_all.shape), preprocessor.x_all.dtype)
+    print("debug 1: ", (preprocessor.x_train.shape), preprocessor.x_train.dtype)
 
     # Reshape inputs
-    preprocessor.x_all = preprocessor.x_all.reshape(preprocessor.x_all.shape[0], 1, preprocessor.x_all.shape[1])
-    print("preprocessor.x_all shape in AUTO-ENCODER: ", preprocessor.x_all.shape)
+    preprocessor.x_train = preprocessor.x_train.reshape(preprocessor.x_train.shape[0], 1, preprocessor.x_train.shape[1])
+    preprocessor.x_test = preprocessor.x_test.reshape(preprocessor.x_test.shape[0], 1, preprocessor.x_test.shape[1])
+    print("preprocessor.x_train shape in AUTO-ENCODER: ", preprocessor.x_train.shape)
 
     # Build the model
     model_ = Autoencoder(optimizer='adam', loss='mae')
-    model = model_.build_autoencoder(preprocessor.x_all)
+    model = model_.build_autoencoder(preprocessor.x_train)
     model.compile(optimizer='adam', loss='mae')
     model.summary()
 
     # Train the model
-    history = model.fit(preprocessor.x_all, preprocessor.x_all, epochs = model_.epochs, batch_size=model_.batch_size,
+    history = model.fit(preprocessor.x_train, preprocessor.x_train, epochs = model_.epochs, batch_size=model_.batch_size,
               validation_split=0.4).history
 
     # Plot the training loss
@@ -71,4 +74,48 @@ if __name__ == "__main__":
     ax.set_xlabel('Epoch')
     ax.set_ylabel("Loss")
     ax.legend(loc='upper right')
+    plt.show()
+
+    train_df = preprocessor.df[0:len(preprocessor.x_train)]
+    test_df = preprocessor.df[len(preprocessor.x_train):]
+
+    # Plot loss distribution of the training set
+    X_predict = model.predict(preprocessor.x_train)
+    X_predict = X_predict.reshape(X_predict.shape[0], X_predict.shape[2])
+    X_predict = pd.DataFrame(X_predict, columns=train_df.columns)
+    X_predict.index =train_df.index
+
+    scored = pd.DataFrame(index=train_df.index)
+    Xtrain = preprocessor.x_train.reshape(preprocessor.x_train.shape[0], preprocessor.x_train.shape[2])
+    scored['Loss_mae'] = np.mean(np.abs(X_predict - Xtrain), axis=1)
+    plt.figure(figsize=(10,10), dpi=80)
+    sns.distplot(scored['Loss_mae'] , bins=20, kde=True, color='blue')
+    plt.xlim([0.0,0.5])
+    plt.show()
+
+    # Calculate the loss on the test set
+    X_predict = model.predict(preprocessor.x_test)
+    X_predict = X_predict.reshape(X_predict.shape[0], X_predict.shape[2])
+    X_predict = pd.DataFrame(X_predict, columns=test_df.columns)
+    X_predict.index = test_df.index
+
+    scored = pd.DataFrame(index = test_df.index)
+    Xtest = preprocessor.x_test.reshape(preprocessor.x_test.shape[0], preprocessor.x_test.shape[2])
+    scored['Loss_mae'] = np.mean(np.abs(X_predict-Xtest), axis=1)
+    scored['Threshold'] = 0.6
+    scored['Anomaly'] = scored['Loss_mae'] > scored['Threshold']
+    scored.head()
+
+    X_predict_train = model.predict(preprocessor.x_train)
+    X_predict_train = X_predict_train.reshape(X_predict_train.shape[0], X_predict_train.shape[2])
+    X_predict_train = pd.DataFrame(X_predict_train, columns=train_df.columns)
+    X_predict_train.index = train_df.index
+
+    scored_train = pd.DataFrame(index=train_df.index)
+    Xtrain = preprocessor.x_train.reshape(preprocessor.x_train.shape[0], preprocessor.x_train.shape[2])
+    scored_train['Loss_mae'] = np.mean(np.abs(X_predict_train - Xtrain), axis=1)
+    scored_train['Threshold'] = 0.6
+    scored_train['Anomaly'] = scored_train['Loss_mae'] > scored_train['Threshold']
+    scored = pd.concat([scored_train, scored])
+    scored.plot(logy=True, figsize=(10,10), color=['blue', 'red'])
     plt.show()

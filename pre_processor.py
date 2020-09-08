@@ -3,7 +3,7 @@ import numpy as np
 import json
 from sklearn.utils import shuffle
 from feature_extractor import FeatureExtractor
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import time
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
@@ -45,9 +45,15 @@ class Preprocessor():
 
         # Apply dimensionality reduction
         if self.supervised:
+            scaler = MinMaxScaler()
+            self.x_train = scaler.fit_transform(self.x_train)
+            self.x_test = scaler.transform(self.x_test)
             self.x_train = self.apply_PCA(self.x_train)
             self.x_test = self.apply_PCA(self.x_test)
-        self.x_all = self.apply_PCA(self.x_all)
+        else:
+            scaler = StandardScaler()
+            self.x_all = scaler.fit_transform(self.x_all)
+            self.x_all = self.apply_PCA(self.x_all)
 
         # Visualization of the data
         if self.visualize:
@@ -212,9 +218,6 @@ class Preprocessor():
 
     def apply_PCA(self, X):
         print("Starting Principal Components Analysis...")
-        scaler = StandardScaler()
-        scaler.fit(X)
-        X = scaler.transform(X)
 
         # Make an instance of the Model
         pca = PCA(n_components=2)
@@ -244,6 +247,7 @@ class Preprocessor():
         features = ['feature' + str(i) for i in range(self.x_all_trans_no_pca.shape[1])]
 
         df = pd.DataFrame(self.x_all_trans_no_pca, columns=features)
+        print("debuggg 1 ------- ", self.df['labels'].values)
         df['y'] = self.df['labels']
         df['label'] = df['y'].apply(lambda i: str(i))
         print('Size of the dataframe: {}'.format(self.df.shape))
