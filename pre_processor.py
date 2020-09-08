@@ -53,7 +53,7 @@ class Preprocessor():
             if self.supervised:
                 self.visualize_simple_inputs()
                 self.visualize_pca_inputs_sup()
-                # self.visualize_tsne_inputs_sup(self.x_all.shape[0])
+                self.visualize_tsne_inputs_sup(self.x_all.shape[0])
             else:
                 self.visualize_simple_inputs()
                 self.visualize_pca_inputs()
@@ -262,7 +262,7 @@ class Preprocessor():
         plt.figure(figsize=(10, 10))
         sns.scatterplot(x="pca-one", y="pca-two", hue="y", palette=customPalette,
                         data=df.loc[rndperm, :], legend="full", alpha=0.3)
-        plt.title("Input data after PCA in 2d plot")
+        plt.title("Input data after PCA in 2d plot for labeled data")
         plt.show()
 
         colors = {'0': 'red', '1': 'blue'}
@@ -276,7 +276,7 @@ class Preprocessor():
         ax.set_xlabel('pca-one')
         ax.set_ylabel('pca-two')
         ax.set_zlabel('pca-three')
-        plt.title("Input data after PCA in 3d plot")
+        plt.title("Input data after PCA in 3d plot for labeled data")
         plt.show()
 
     def visualize_pca_inputs(self):
@@ -314,6 +314,50 @@ class Preprocessor():
         ax.set_ylabel('pca-two')
         ax.set_zlabel('pca-three')
         plt.title("Input data after PCA in 3d plot")
+        plt.show()
+
+    def visualize_tsne_inputs_sup(self, N):
+        # For re-producability of the results
+        features = ['feature' + str(i) for i in range(self.x_all_trans_no_pca.shape[1])]
+        df = pd.DataFrame(self.x_all_trans_no_pca, columns=features)
+        df['y'] = self.df['labels']
+        df['label'] = df['y'].apply(lambda i: str(i))
+        print('Size of the dataframe: {}'.format(df.shape))
+        np.random.seed(42)
+        rndperm = np.random.permutation(df.shape[0])
+
+        df_subset = df.loc[rndperm[:N], :].copy()
+        data_subset = df_subset[features].values
+        pca = PCA(n_components=3)
+        pca_result = pca.fit_transform(data_subset)
+        df_subset['pca-one'] = pca_result[:, 0]
+        df_subset['pca-two'] = pca_result[:, 1]
+        df_subset['pca-three'] = pca_result[:, 2]
+        print('Explained variation per principal component: {}'.format(pca.explained_variance_ratio_))
+
+        time_start = time.time()
+        tsne = TSNE(n_components=2, verbose=1, perplexity=40, n_iter=300)
+        tsne_results = tsne.fit_transform(data_subset)
+        print('t-SNE done! Time elapsed: {} seconds'.format(time.time() - time_start))
+
+        df_subset['tsne-2d-one'] = tsne_results[:, 0]
+        df_subset['tsne-2d-two'] = tsne_results[:, 1]
+        plt.figure(figsize=(10, 10))
+        colors = ["#ff0b04", "#4374b3"]  # Set your custom color palette
+        customPalette = sns.set_palette(sns.color_palette(colors))
+        sns.scatterplot(x="tsne-2d-one", y="tsne-2d-two", hue="y",palette=customPalette,
+                        data=df_subset, legend="full", alpha=0.9)
+        plt.title("Input data after t-SNE in 2d plot for labeled data")
+        plt.show()
+
+        plt.figure(figsize=(16, 7))
+        ax1 = plt.subplot(1, 2, 1)
+        sns.scatterplot(x="pca-one", y="pca-two", hue="y",palette=customPalette,
+                        data=df_subset, legend="full", alpha=0.9, ax=ax1)
+        ax2 = plt.subplot(1, 2, 2)
+        sns.scatterplot(x="tsne-2d-one", y="tsne-2d-two", hue="y",palette=customPalette,
+                        data=df_subset, legend="full", alpha=0.9, ax=ax2)
+        plt.suptitle("PCA vs t-SNE for labeled data")
         plt.show()
 
 
