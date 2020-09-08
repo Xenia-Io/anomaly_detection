@@ -19,15 +19,16 @@ import re
 
 class Preprocessor():
 
-    def __init__(self, filename, supervised):
+    def __init__(self, filename, supervised, visualize= False):
         self.supervised = supervised
         (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
         self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
         self.x_all_trans_no_pca = []
         self.x_all_median = []
+        self.visualize = visualize
 
 
-    def preprocessing(self, printing=False, visualize=True):
+    def preprocessing(self, printing=False):
 
         feature_extractor = FeatureExtractor()
         self.x_all = feature_extractor.fit_transform(self.x_all, term_weighting='tf-idf') # x_all shape: (500, 67)
@@ -49,7 +50,7 @@ class Preprocessor():
         self.x_all = self.apply_PCA(self.x_all)
 
         # Visualization of the data
-        if visualize:
+        if self.visualize:
             if self.supervised:
                 self.visualize_simple_inputs()
                 self.visualize_pca_inputs_sup()
