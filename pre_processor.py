@@ -8,6 +8,8 @@ import time
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 import warnings
+from sklearn.preprocessing import Normalizer, MinMaxScaler
+from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import axes3d, Axes3D
 from sklearn.manifold import TSNE
@@ -19,7 +21,7 @@ import re
 
 class Preprocessor():
 
-    def __init__(self, filename, supervised, visualize= False):
+    def __init__(self, filename, supervised, visualize= True):
         self.supervised = supervised
         (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
         self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
@@ -45,11 +47,17 @@ class Preprocessor():
 
         # Apply dimensionality reduction
         if self.supervised:
-            scaler = MinMaxScaler()
-            self.x_train = scaler.fit_transform(self.x_train)
-            self.x_test = scaler.transform(self.x_test)
-            self.x_train = self.apply_PCA(self.x_train)
-            self.x_test = self.apply_PCA(self.x_test)
+            pipeline = Pipeline([('normalizer', Normalizer()),
+                                 ('scaler', MinMaxScaler())])
+            pipeline.fit(self.x_train)
+            X_train_transformed = pipeline.transform(self.x_train)
+            X_test_transformed = pipeline.transform(self.x_test)
+            # scaler = MinMaxScaler()
+            # scaler.fit(self.x_train)
+            # x_train = scaler.transform(self.x_train)
+            # x_test = scaler.transform(self.x_test)
+            self.x_train = self.apply_PCA(X_train_transformed)
+            self.x_test = self.apply_PCA(X_test_transformed)
         else:
             scaler = StandardScaler()
             self.x_all = scaler.fit_transform(self.x_all)

@@ -39,7 +39,8 @@ class Autoencoder():
         L3 = RepeatVector(X.shape[1])(L2)
         L4 = LSTM(4, activation='relu', return_sequences=True)(L3)
         L5 = LSTM(16, activation='relu', return_sequences=True)(L4)
-        output = TimeDistributed(Dense(X.shape[2]))(L5)
+        # output = TimeDistributed(Dense(X.shape[2]))(L5)
+        output = Dense(X.shape[2], activation='softmax')(L5)
         model = Model(inputs=inputs, outputs=output)
 
         return model
@@ -50,7 +51,16 @@ if __name__ == "__main__":
     # Preprocessing the dataset
     preprocessor = Preprocessor('logs_for_supervised.json', True, False)
     preprocessor.preprocessing()
-    print("debug 1: ", (preprocessor.x_train.shape), preprocessor.x_train.dtype)
+    # print("debug 3: ", preprocessor.x_train)
+
+    # Build train and test dataframes
+    data_tuples = list(zip(preprocessor.x_train, preprocessor.y_train))
+    train_df = pd.DataFrame(data_tuples, columns=['messages', 'labels'])
+    # print("xenia 1: ", train_df['messages'][0])
+    # print("xenia 2: ", preprocessor.x_train[0])
+
+    data_tuples2 = list(zip(preprocessor.x_test, preprocessor.y_test))
+    test_df = pd.DataFrame(data_tuples2, columns=['messages', 'labels'])
 
     # Reshape inputs
     preprocessor.x_train = preprocessor.x_train.reshape(preprocessor.x_train.shape[0], 1, preprocessor.x_train.shape[1])
@@ -58,9 +68,9 @@ if __name__ == "__main__":
     print("preprocessor.x_train shape in AUTO-ENCODER: ", preprocessor.x_train.shape)
 
     # Build the model
-    model_ = Autoencoder(optimizer='adam', loss='mae')
+    model_ = Autoencoder(optimizer='adam', loss='mse')
     model = model_.build_autoencoder(preprocessor.x_train)
-    model.compile(optimizer='adam', loss='mae')
+    model.compile(optimizer='adam', loss='mse')
     model.summary()
 
     # Train the model
@@ -76,20 +86,17 @@ if __name__ == "__main__":
     ax.legend(loc='upper right')
     plt.show()
 
-    train_df = preprocessor.df[0:len(preprocessor.x_train)]
-    test_df = preprocessor.df[len(preprocessor.x_train):]
-
     # Plot loss distribution of the training set
     X_predict = model.predict(preprocessor.x_train)
     X_predict = X_predict.reshape(X_predict.shape[0], X_predict.shape[2])
     X_predict = pd.DataFrame(X_predict, columns=train_df.columns)
-    X_predict.index =train_df.index
+    X_predict.index = train_df.index
 
     scored = pd.DataFrame(index=train_df.index)
     Xtrain = preprocessor.x_train.reshape(preprocessor.x_train.shape[0], preprocessor.x_train.shape[2])
-    scored['Loss_mae'] = np.mean(np.abs(X_predict - Xtrain), axis=1)
+    scored['Loss_mse'] = np.mean(np.power(X_predict - Xtrain, 2), axis=1)
     plt.figure(figsize=(10,10), dpi=80)
-    sns.distplot(scored['Loss_mae'] , bins=20, kde=True, color='blue')
+    sns.distplot(scored['Loss_mse'] , bins=20, kde=True, color='blue')
     plt.xlim([0.0,0.5])
     plt.show()
 
@@ -101,9 +108,9 @@ if __name__ == "__main__":
 
     scored = pd.DataFrame(index = test_df.index)
     Xtest = preprocessor.x_test.reshape(preprocessor.x_test.shape[0], preprocessor.x_test.shape[2])
-    scored['Loss_mae'] = np.mean(np.abs(X_predict-Xtest), axis=1)
+    scored['Loss_mse'] = np.mean(np.power(X_predict-Xtest, 2), axis=1)
     scored['Threshold'] = 0.6
-    scored['Anomaly'] = scored['Loss_mae'] > scored['Threshold']
+    scored['Anomaly'] = scored['Loss_mse'] > scored['Threshold']
     scored.head()
 
     X_predict_train = model.predict(preprocessor.x_train)
@@ -113,9 +120,9 @@ if __name__ == "__main__":
 
     scored_train = pd.DataFrame(index=train_df.index)
     Xtrain = preprocessor.x_train.reshape(preprocessor.x_train.shape[0], preprocessor.x_train.shape[2])
-    scored_train['Loss_mae'] = np.mean(np.abs(X_predict_train - Xtrain), axis=1)
+    scored_train['Loss_mse'] = np.mean(np.power(X_predict_train - Xtrain, 2), axis=1)
     scored_train['Threshold'] = 0.6
-    scored_train['Anomaly'] = scored_train['Loss_mae'] > scored_train['Threshold']
+    scored_train['Anomaly'] = scored_train['Loss_mse'] > scored_train['Threshold']
     scored = pd.concat([scored_train, scored])
     scored.plot(logy=True, figsize=(10,10), color=['blue', 'red'])
     plt.show()
