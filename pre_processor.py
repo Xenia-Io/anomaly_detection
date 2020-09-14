@@ -5,6 +5,7 @@ from sklearn.utils import shuffle
 from feature_extractor import FeatureExtractor
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import time
+import seaborn as sns
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 import warnings
@@ -47,17 +48,21 @@ class Preprocessor():
 
         # Apply dimensionality reduction
         if self.supervised:
-            pipeline = Pipeline([('normalizer', Normalizer()),
-                                 ('scaler', MinMaxScaler())])
-            pipeline.fit(self.x_train)
-            X_train_transformed = pipeline.transform(self.x_train)
-            X_test_transformed = pipeline.transform(self.x_test)
-            # scaler = MinMaxScaler()
-            # scaler.fit(self.x_train)
-            # x_train = scaler.transform(self.x_train)
-            # x_test = scaler.transform(self.x_test)
-            self.x_train = self.apply_PCA(X_train_transformed)
-            self.x_test = self.apply_PCA(X_test_transformed)
+            # pipeline = Pipeline([('normalizer', Normalizer()),
+            #                      ('scaler', MinMaxScaler())])
+            # pipeline.fit(self.x_train)
+            # print("YOOOOOOOOO 1 " , self.x_train[0])
+            # self.x_train = pipeline.transform(self.x_train)
+            # self.x_test = pipeline.transform(self.x_test)
+            # print("YOOOOOOOOO 2 ", self.x_train[0])
+            scaler = MinMaxScaler()
+            scaler.fit(self.x_train)
+            print("YOOOOOOOOO 1 ", self.x_train[0])
+            x_train = scaler.transform(self.x_train)
+            x_test = scaler.transform(self.x_test)
+            print("YOOOOOOOOO 2 after scaling", x_train[0])
+            self.x_train = self.apply_PCA(x_train, self.y_train)
+            self.x_test = self.apply_PCA(x_test, self.y_test)
         else:
             scaler = StandardScaler()
             self.x_all = scaler.fit_transform(self.x_all)
@@ -145,7 +150,7 @@ class Preprocessor():
                 # Mapping labels into integers
                 mapping = {'INFO': 0, 'WARNING': 0, 'SEVERE': 1}
                 df = df.replace({'labels': mapping})
-
+                print("df = ", df)
                 return (x_train, y_train), (x_test, y_test), df
 
             else:
@@ -224,14 +229,19 @@ class Preprocessor():
         return (x_train, y_train), (x_test, y_test)
 
 
-    def apply_PCA(self, X):
+    def apply_PCA(self, X, y=None):
         print("Starting Principal Components Analysis...")
 
         # Make an instance of the Model
-        pca = PCA(n_components=2)
-        pca.fit(X)
-        X = pca.transform(X)
-        print("Number of components PCA choose after fitting: ", pca.n_components_)
+        pca = TSNE(n_components=2)
+        # pca.fit(X)
+        X = pca.fit_transform(X)
+        # print("Number of components PCA choose after fitting: ", pca.n_components_)
+
+        tsne_data = np.vstack((X.T, y)).T
+        tsne_df = pd.DataFrame(data=tsne_data, columns=("Dim_1", "Dim_2", "label"))
+        sns.FacetGrid(tsne_df, hue="label", size=6).map(plt.scatter, 'Dim_1', 'Dim_2').add_legend()
+        plt.show()
 
         return X
 

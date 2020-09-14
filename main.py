@@ -6,7 +6,7 @@ def main():
     tester = Tester(20, 35, 'logs_lhcb.json',is_supervised=False, visualize=True)
     # tester.run_isoForest()
     # tester.run_kMeans()
-    tester.run_kMedians()
+    # tester.run_kMedians()
 
     # preprocessor = Preprocessor('logs_lhcb.json', False, visualize=True)
     # preprocessor = Preprocessor('logs_for_supervised.json', True, visualize=True)

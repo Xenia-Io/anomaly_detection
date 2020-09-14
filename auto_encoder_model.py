@@ -19,6 +19,7 @@ from mpl_toolkits.mplot3d import Axes3D
 sns.set(style='whitegrid', context='notebook')
 import matplotlib.pyplot as plt
 import seaborn as sns
+sns.set(style='whitegrid', context='notebook')
 import random as rn
 import pandas as pd
 import numpy as np
@@ -48,7 +49,6 @@ class Autoencoder():
         L3 = RepeatVector(X.shape[1])(L2)
         L4 = LSTM(4, activation='relu', return_sequences=True)(L3)
         L5 = LSTM(16, activation='relu', return_sequences=True)(L4)
-        # output = TimeDistributed(Dense(X.shape[2]))(L5)
         output = Dense(X.shape[2], activation='softmax')(L5)
         model = Model(inputs=inputs, outputs=output)
 
@@ -97,7 +97,7 @@ class Autoencoder():
             *zip(*features_embedded[np.where(labels == 1)]),
             marker='o',
             color='r',
-            s=8,
+            s=20,
             alpha=0.99,
             label='Fraud'
         )
@@ -105,7 +105,7 @@ class Autoencoder():
             *zip(*features_embedded[np.where(labels == 0)]),
             marker='o',
             color='g',
-            s=8,
+            s=20,
             alpha=0.99,
             label='Clean'
         )
@@ -113,6 +113,7 @@ class Autoencoder():
         # storing it to be displayed later
         plt.legend(loc='best')
         plt.show()
+
 
 if __name__ == "__main__":
 
@@ -132,9 +133,12 @@ if __name__ == "__main__":
     y_all_list = np.concatenate((preprocessor.y_train, preprocessor.y_test), axis=0)
 
     for i in preprocessor.df.index:
-        preprocessor.df['messages'][i] = x_all_list[i]
-        # preprocessor.df.at[i, "messages"] = x_all_list[i]
+        preprocessor.df.at[i, "messages"] = x_all_list[i]
     preprocessor.df.labels = y_all_list
+
+    print("EDWWW ---- item 0 ", preprocessor.df['messages'][0], preprocessor.x_train[0], x_all_list[0])
+    print("EDWWW ---- item 61", preprocessor.df['messages'][61], preprocessor.x_test[18], x_all_list[61])
+    print("EDWWW ---- item 42", preprocessor.df['messages'][42], preprocessor.x_train[42], x_all_list[42])
 
     # Mapping labels into integers
     mapping = {'INFO': 0, 'WARNING': 0, 'SEVERE': 1}
@@ -170,88 +174,99 @@ if __name__ == "__main__":
     # clean = clean.sample(frac=1).reset_index(drop=True)
 
     # training set: exlusively non-fraud transactions
+    X_train = clean.iloc[:TRAINING_SAMPLE]
+    # print("___HERE : ", X_train.shape, X_train)
+    # print("EVI ---- item 0 ", preprocessor.df['messages'][0], preprocessor.x_train[0], X_train['messages'][0])
+    # print("EVI ---- item 42 ", preprocessor.df['messages'][42], preprocessor.x_train[42], X_train['messages'][42])
     X_train = clean.iloc[:TRAINING_SAMPLE].drop('labels', axis=1)
 
     # testing  set: the remaining non-fraud + all the fraud
-    X_test = clean.iloc[TRAINING_SAMPLE:].append(fraud).sample(frac=1)
+    X_test = preprocessor.df.loc[TRAINING_SAMPLE: len(x_all_list), :]
+    # X_test = clean.iloc[TRAINING_SAMPLE:]
+    # print("___HERE : ", X_test.shape, X_test)
+    #
+    # X_test = clean.iloc[TRAINING_SAMPLE:].append(fraud).sample(frac=1)
+    print("___HERE X_test type: ", type(X_test), X_test)
+    # print("EVI ---- item 0 ", preprocessor.df['messages'][43], preprocessor.x_test[0], X_test['messages'][43])
+    # print("EVI ---- item 1 ", preprocessor.df['messages'][44], preprocessor.x_test[1], X_test['messages'][44])
+    # print("EVI ---- item 2 ", preprocessor.df['messages'][45], preprocessor.x_test[2], X_test['messages'][45])
 
-    print(f"""Our testing set is composed as follows: {X_test.labels.value_counts()}""")
 
-    X_train, X_validate = train_test_split(X_train,
-                                           test_size=len(preprocessor.x_test),
-                                           random_state=RANDOM_SEED)
+    # print(f"""Our testing set is composed as follows: {X_test.labels.value_counts()}""")
 
+    # X_train, X_validate = train_test_split(X_train,
+    #                                        test_size=len(preprocessor.x_test),
+    #                                        random_state=RANDOM_SEED)
+    #
     # manually splitting the labels from the test df
     X_test, y_test = X_test.drop('labels', axis=1).values, X_test.labels.values
+    print("--------X_test labels: ", y_test)
+    print("--------X-test : ", X_test)
 
     print(f"""Shape of the datasets:
-        training (rows, cols) = {(X_train.shape)}
-        validate (rows, cols) = {X_validate.shape}
-        holdout  (rows, cols) = {X_test.shape}""")
+        training (rows, cols) = {(preprocessor.x_train.shape)}
+        testing  (rows, cols) = {preprocessor.x_test.shape}""")
 
+    print(f"""Shape of the datasets:
+         training (rows, cols) = {(X_train.shape)}
+         testing  (rows, cols) = {X_test.shape}""")
 
     # Reshape inputs
+    # print("REEEE : ", preprocessor.x_train[0], X_train['messages'][0]) --- typwnei TA IDIA
+    preprocessor.x_train = preprocessor.x_train.reshape(preprocessor.x_train.shape[0], 1, preprocessor.x_train.shape[1])
+    preprocessor.x_test = preprocessor.x_test.reshape(preprocessor.x_test.shape[0], 1, preprocessor.x_test.shape[1])
+    print("preprocessor.x_train shape in AUTO-ENCODER: ", preprocessor.x_train.shape)
 
-    X_train = np.expand_dims(np.asarray(X_train), -1)
-    X_test = np.expand_dims(np.asarray(X_test), -1)
-    X_validate = np.expand_dims(np.asarray(X_validate), -1)
-    X_train_tensor = tf.convert_to_tensor(np.asarray(X_train))
-    X_test_tensor = tf.convert_to_tensor(np.asarray(X_test))
-    X_validate_tensor = tf.convert_to_tensor(np.asarray(X_validate))
-    sess = tf.InteractiveSession()
-    # X_train_tf = tf.convert_to_tensor(np.asarray(X_train), np.float64)
-    # X_test_tf = tf.convert_to_tensor(np.asarray(X_test), np.float64)
-    # X_validate_tf = tf.convert_to_tensor(np.asarray(X_validate), np.float64)
+
     print(f"""Shape of the datasets:
-            training (rows, cols) = {X_train.shape}
-            validate (rows, cols) = {X_validate.shape}
-            holdout  (rows, cols) = {X_test.shape}""")
-    print((type(X_train)))
-    # X_train = np.asarray(X_train).reshape(X_train.shape[0], 1, X_train.shape[1])
-    # X_validate = np.asarray(X_validate).reshape(X_validate.shape[0], 1, X_validate.shape[1])
-    # X_test = np.asarray(X_test).reshape(X_test.shape[0], 1, X_test.shape[1])
+            training (rows, cols) = {(preprocessor.x_train.shape)}
+            testing  (rows, cols) = {preprocessor.x_test.shape}""")
+
 
     # Build the model
     model_ = Autoencoder(optimizer='adam', loss='mse')
-    model = model_.build_autoencoder(X_train)
+    model = model_.build_autoencoder(preprocessor.x_train)
     model.compile(optimizer='adam', loss='mse')
     model.summary()
 
     data_subset = visualisation_initial.messages.values
     model_.tsne_scatter(data_subset, labels, dimensions=2)
 
-    print(X_train.shape, type(X_train))
+
     # Train the model
     history = model.fit(
-        X_train_tensor, X_train_tensor,
+        preprocessor.x_train, preprocessor.x_train,
         epochs=model_.epochs,
         batch_size=model_.batch_size,
-        shuffle=True, validation_data=(X_validate_tensor, X_validate_tensor)
+        shuffle=True, validation_split=0.3
     )
-
-    # sess.close()
+    print("XENIA DD : " , preprocessor.x_test.shape)
     # pass the transformed test set through the autoencoder to get the reconstructed result
-
-    reconstructions = model.predict(X_test)
+    reconstructions = model.predict(preprocessor.x_test)
     # calculating the mean squared error reconstruction loss per row in the numpy array
-    mse = np.mean(np.power(X_test - reconstructions, 2), axis=1)
-
+    mse = np.mean(np.power(preprocessor.x_test - reconstructions, 2), axis=1)
+    # print("x_test[0] shape: ", preprocessor.x_test[0].shape, preprocessor.x_test[0])
+    # print("reconstr[0] shape: ", reconstructions[0].shape, reconstructions[0])
+    # print("mse[0]: ", type(mse[0]), mse[0])
+    print("prepro y_test: ", preprocessor.y_test)
     print(mse.shape, " -- mse: ", mse)
 
     # set to whatever you like
-    sample_size = 19
+    sample_size = 5
 
     # Mapping labels into integers
     mapping = {'INFO': 0, 'WARNING': 0, 'SEVERE': 1}
-    preprocessor.y_test = list(map(mapping.get, y_test))
+    print("DEBUGG 1 : ", preprocessor.y_test)
+    preprocessor.y_test = list(map(mapping.get, preprocessor.y_test))
+    print("DEBUGG 2 : ", preprocessor.y_test)
+    print("DEBUGG 1 : ", type(preprocessor.y_test))
 
     # showing the reconstruction losses for a subsample of transactions
+    # showing the reconstruction losses for a subsample of transactions
     print(f'Mean Squared Error reconstruction losses for {sample_size} clean transactions:')
-    print([np.where(y_test == 0)][:sample_size])
     print(mse[np.where(y_test == 0)][:sample_size])
     print(f'\nMean Squared Error reconstruction losses for {sample_size} fraudulent transactions:')
     print(mse[np.where(y_test == 1)][:sample_size])
-
 
     # adjust this parameter to customise the recall/precision trade-off
     Z_SCORE_THRESHOLD = 3
@@ -259,14 +274,16 @@ if __name__ == "__main__":
     # find the outliers on our reconstructions' mean squared errors
     mad_z_scores, threshold_value = model_.detect_mad_outliers(mse, threshold=Z_SCORE_THRESHOLD)
     mad_outliers = (mad_z_scores > Z_SCORE_THRESHOLD).astype(int)
+    print("mad outliers of our reconstructions' MSE: ", mad_outliers)
 
     anomalies = len(mad_outliers[mad_outliers == True])
-    total_trades = len(y_test)
+    total_trades = len(preprocessor.y_test)
+    d = (anomalies / total_trades * 100)
 
-    print(f"""MAD Z-score > {Z_SCORE_THRESHOLD} is the selected threshold.
-    I.e. any trade with a mean squared reconstruction error >= {threshold_value:,.2f} is flagged.
+    print("MAD Z-score > ", Z_SCORE_THRESHOLD, " is the selected threshold.")
+    print("Any trade with a MSRE >= ", threshold_value, " is flagged.")
+    print("This results in", anomalies, "detected anomalies, or ", d,"% out of ", total_trades , "trades reported")
 
-    This results in {anomalies:,} detected anomalies, or {anomalies / total_trades * 100:.2f}% out of {total_trades:,} trades reported.""")
 
     data = np.column_stack((range(len(mse)), mse))
     print("data: ", data)
@@ -280,12 +297,12 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(15, 8))
 
     # plot reconstruction errors
-    ax.scatter(clean_x, clean_y, s=0.25, color='g', alpha=0.6, label='Clean')
-    ax.scatter(fraud_x, fraud_y, s=5.00, color='r', alpha=1, label='Fraud')
+    ax.scatter(clean_x, clean_y, s=20, color='g', alpha=0.6, label='Clean')
+    ax.scatter(fraud_x, fraud_y, s=30, color='r', alpha=1, label='Fraud')
 
     # MAD threshold line
     ax.plot([threshold_value for i in range(len(mse))], color='orange', linewidth=1.5,
-            label=f'MAD threshold\n(z-score>{Z_SCORE_THRESHOLD} == mse>{threshold_value:.2f} == mse>10**{np.log10(threshold_value):.2f})')
+            label='MAD threshold')
 
     # change scale to log & limit x-axis range
     ax.set_yscale('log')
