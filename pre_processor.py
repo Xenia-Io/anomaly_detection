@@ -1,7 +1,7 @@
-import UMAP as UMAP
 import pandas as pd
 import numpy as np
 import json
+from umap import UMAP
 from sklearn.utils import shuffle
 from feature_extractor import FeatureExtractor
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -46,36 +46,31 @@ class Preprocessor():
             print("Shape of x_test : ", self.x_test.shape)
             print("Shape of copied and un-transformed x_all : ", self.x_all_trans_no_pca.shape)
             print("Sample of copied and un-transformed x_all: ", self.x_all_trans_no_pca[0])
+            print("Sample of x_all (no PCA applied in x_all till now though): ", self.x_all[0])
 
         # Apply dimensionality reduction
         if self.supervised:
-            # pipeline = Pipeline([('normalizer', Normalizer()),
-            #                      ('scaler', MinMaxScaler())])
-            # pipeline.fit(self.x_train)
-            # print("YOOOOOOOOO 1 " , self.x_train[0])
-            # self.x_train = pipeline.transform(self.x_train)
-            # self.x_test = pipeline.transform(self.x_test)
-            # print("YOOOOOOOOO 2 ", self.x_train[0])
             scaler = MinMaxScaler()
             scaler.fit(self.x_train)
-            print("YOOOOOOOOO 1 ", self.x_train[0])
             x_train = scaler.transform(self.x_train)
             x_test = scaler.transform(self.x_test)
-            print("YOOOOOOOOO 2 after scaling", x_train[0])
-            self.x_train = self.apply_PCA(x_train, self.y_train)
-            self.x_test = self.apply_PCA(x_test, self.y_test)
+            self.x_train = self.apply_Dim_Reduction(x_train, apply_pca=True, apply_tSNE=False, apply_umap=False)
+            self.x_test = self.apply_Dim_Reduction(x_test, apply_pca=True, apply_tSNE=False, apply_umap=False)
         else:
-            scaler = StandardScaler()
-            self.x_all = scaler.fit_transform(self.x_all)
-            self.x_all = self.apply_PCA(self.x_all)
+            # scaler = StandardScaler()
+            # self.x_all = scaler.fit_transform(self.x_all)
+            print("is supervised ? : " , self.supervised)
+            self.x_all = self.apply_Dim_Reduction(self.x_all, apply_pca=False, apply_tSNE=False, apply_umap=True)
 
         # Visualization of the data
         if self.visualize:
             if self.supervised:
+                self.visualize_inputs_(self.x_all_trans_no_pca)
                 self.visualize_simple_inputs()
                 self.visualize_pca_inputs_sup()
                 self.visualize_tsne_inputs_sup(self.x_all.shape[0])
             else:
+                self.visualize_inputs_(self.x_all_trans_no_pca)
                 self.visualize_simple_inputs()
                 self.visualize_pca_inputs()
                 self.visualize_tsne_inputs(self.x_all.shape[0])
@@ -188,7 +183,7 @@ class Preprocessor():
                     print("The keys of dataframe: ", data_df.keys())
                     print("data_df: ", (data_df))
 
-                # Split train and test data
+                # Split train and test data - Shuffle train data
                 (x_train, _), (x_test, _) = self._split_data(x_data, train_ratio=train_ratio, split_type=split_type)
                 print('Total: {} instances, train: {} instances, test: {} instances'.format(
                     x_data.shape[0], x_train.shape[0], x_test.shape[0]))
@@ -230,21 +225,17 @@ class Preprocessor():
         return (x_train, y_train), (x_test, y_test)
 
 
-    def apply_PCA(self, X, y=None):
+    def apply_Dim_Reduction(self, X, apply_pca=True, apply_tSNE=False, apply_umap=False):
         print("Starting Principal Components Analysis...")
 
-        # Make an instance of the Model
-        pca = TSNE(n_components=1)
-        # pca = UMAP(n_components=1)
-        # pca.fit(X)
-        X = pca.fit_transform(X)
-        # print("Number of components PCA choose after fitting: ", pca.n_components_)
-
-        # tsne_data = np.vstack((X.T, y)).T
-        # tsne_df = pd.DataFrame(data=tsne_data, columns=("Dim_1", "Dim_2", "label"))
-        # sns.FacetGrid(tsne_df, hue="label", size=6).map(plt.scatter, 'Dim_1', 'Dim_2').add_legend()
-        # plt.show()
-
+        if apply_pca:
+            X = PCA(n_components=2).fit_transform(X)
+        elif apply_tSNE:
+            X = TSNE(n_components=2).fit_transform(X)
+        else:
+            X = UMAP(n_neighbors=15,
+                      min_dist=0.1,
+                      metric='correlation').fit_transform(X)
         return X
 
 
@@ -262,6 +253,25 @@ class Preprocessor():
         plt.ylabel('events')
         plt.title("Input data after feature extraction")
         plt.show()
+
+    def visualize_inputs_(self, X):
+        X_PCA = PCA(n_components=5).fit_transform(X)
+        X_TSNE = TSNE().fit_transform(X)
+        X_UMAP = UMAP(n_neighbors=15,
+                      min_dist=0.1,
+                      metric='correlation').fit_transform(X)
+        fig = plt.figure(figsize=(40, 30))
+        plt.subplot(2, 2, 1)
+        plt.scatter(X_PCA[:, 0], X_PCA[:, 1], cmap='Set1')
+        plt.title("Principal Component Analysis", fontsize=10)
+        plt.subplot(2, 2, 2)
+        plt.scatter(X_UMAP[:, 0], X_UMAP[:, 1], cmap='Set1')
+        plt.title("Uniform Manifold Approximation and Projections", fontsize=10)
+        plt.subplot(2, 2, 3)
+        plt.scatter(X_TSNE[:, 0], X_TSNE[:, 1], cmap='Set1')
+        plt.title("t-Distributed Stochastic Neighbor Embedding", fontsize=10)
+        plt.show()
+
 
     def visualize_pca_inputs_sup(self):
         features = ['feature' + str(i) for i in range(self.x_all_trans_no_pca.shape[1])]
