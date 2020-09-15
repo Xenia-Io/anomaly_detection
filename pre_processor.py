@@ -1,3 +1,4 @@
+import UMAP as UMAP
 import pandas as pd
 import numpy as np
 import json
@@ -233,15 +234,16 @@ class Preprocessor():
         print("Starting Principal Components Analysis...")
 
         # Make an instance of the Model
-        pca = TSNE(n_components=2)
+        pca = TSNE(n_components=1)
+        # pca = UMAP(n_components=1)
         # pca.fit(X)
         X = pca.fit_transform(X)
         # print("Number of components PCA choose after fitting: ", pca.n_components_)
 
-        tsne_data = np.vstack((X.T, y)).T
-        tsne_df = pd.DataFrame(data=tsne_data, columns=("Dim_1", "Dim_2", "label"))
-        sns.FacetGrid(tsne_df, hue="label", size=6).map(plt.scatter, 'Dim_1', 'Dim_2').add_legend()
-        plt.show()
+        # tsne_data = np.vstack((X.T, y)).T
+        # tsne_df = pd.DataFrame(data=tsne_data, columns=("Dim_1", "Dim_2", "label"))
+        # sns.FacetGrid(tsne_df, hue="label", size=6).map(plt.scatter, 'Dim_1', 'Dim_2').add_legend()
+        # plt.show()
 
         return X
 

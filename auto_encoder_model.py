@@ -58,6 +58,7 @@ class Autoencoder():
 
     def detect_mad_outliers(self, points, threshold=3.5):
         # calculate the median of the input array
+        print("points shape : ", points.shape)
         median = np.median(points, axis=0)
 
         # calculate the absolute difference of each data point to the calculated median
@@ -73,6 +74,7 @@ class Autoencoder():
         # return as extra information what the original mse value was at which the threshold is hit
         # need to find a way to compute this mathematically, but I'll just use the index of the nearest candidate for now
         idx = (np.abs(modified_z_score - threshold)).argmin()
+        print("idx : ", idx)
         threshold_value = points[idx]
 
         return modified_z_score, threshold_value
@@ -210,6 +212,12 @@ if __name__ == "__main__":
     print(f"""Shape of the datasets:
          training (rows, cols) = {(X_train.shape)}
          testing  (rows, cols) = {X_test.shape}""")
+
+    # configure our pipeline
+    pipeline = Pipeline([('normalizer', Normalizer()),
+                         ('scaler', MinMaxScaler())])
+    pipeline.fit(preprocessor.x_train)
+    preprocessor.x_train = pipeline.transform(preprocessor.x_train)
 
     # Reshape inputs
     # print("REEEE : ", preprocessor.x_train[0], X_train['messages'][0]) --- typwnei TA IDIA
