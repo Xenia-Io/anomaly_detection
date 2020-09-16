@@ -103,6 +103,7 @@ if __name__ == "__main__":
     X_predict = model.predict(preprocessor.x_test)
     X_predict = X_predict.reshape(X_predict.shape[0], X_predict.shape[2])
     X_predict = pd.DataFrame(X_predict, columns=test_df.columns)
+    print("++++++++++++++++++++++++++ ", test_df.columns)
     X_predict.index = test_df.index
 
     scored = pd.DataFrame(index = test_df.index)

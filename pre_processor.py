@@ -35,9 +35,9 @@ class Preprocessor():
     def preprocessing(self, printing=False):
 
         feature_extractor = FeatureExtractor()
-        self.x_all = feature_extractor.fit_transform(self.x_all, term_weighting='tf-idf') # x_all shape: (500, 67)
-        self.x_train = feature_extractor.fit_transform(self.x_train, term_weighting='tf-idf')  #x_train shape: (350,67)
-        self.x_test = feature_extractor.transform(np.array(self.x_test))  # Test data shape: (150, 67)
+        self.x_all = feature_extractor.fit_transform(self.x_all, term_weighting='tf-idf')
+        self.x_train = feature_extractor.fit_transform(self.x_train, term_weighting='tf-idf')
+        self.x_test = feature_extractor.transform(np.array(self.x_test))
         self.x_all_trans_no_pca = np.copy(self.x_all)
 
         if printing:
@@ -54,13 +54,13 @@ class Preprocessor():
             scaler.fit(self.x_train)
             x_train = scaler.transform(self.x_train)
             x_test = scaler.transform(self.x_test)
-            self.x_train = self.apply_Dim_Reduction(x_train, apply_pca=True, apply_tSNE=False, apply_umap=False)
-            self.x_test = self.apply_Dim_Reduction(x_test, apply_pca=True, apply_tSNE=False, apply_umap=False)
+            self.x_train = self.apply_Dim_Reduction(x_train, apply_pca=False, apply_tSNE=True, apply_umap=False)
+            self.x_test = self.apply_Dim_Reduction(x_test, apply_pca=False, apply_tSNE=True, apply_umap=False)
         else:
-            # scaler = StandardScaler()
-            # self.x_all = scaler.fit_transform(self.x_all)
+            scaler = StandardScaler()
+            self.x_all = scaler.fit_transform(self.x_all)
             print("is supervised ? : " , self.supervised)
-            self.x_all = self.apply_Dim_Reduction(self.x_all, apply_pca=False, apply_tSNE=False, apply_umap=True)
+            self.x_all = self.apply_Dim_Reduction(self.x_all, apply_pca=True, apply_tSNE=False, apply_umap=False)
 
         # Visualization of the data
         if self.visualize:
@@ -101,15 +101,14 @@ class Preprocessor():
 
                 with open(log_file) as json_file:
                     data = json.load(json_file)
-                    print("data shape = ", len(data))
 
                     # construct list of '_sources'
                     dict_of_lists = {}
                     messages = []
                     labels = []
                     for item in range(len(data['responses'][0]['hits']['hits'])):
-                        labels.append(data['responses'][0]['hits']['hits'][item]['_source']['wcc_severity'])
-                        messages.append(data['responses'][0]['hits']['hits'][item]['_source']['wcc_message'])
+                        labels.append(data['responses'][0]['hits']['hits'][item]['_source']['severity'])
+                        messages.append(data['responses'][0]['hits']['hits'][item]['_source']['message'])
                     dict_of_lists['messages'] = messages
                     dict_of_lists['labels'] = labels
 
@@ -144,9 +143,8 @@ class Preprocessor():
                 df['labels'] = y_all_list
 
                 # Mapping labels into integers
-                mapping = {'INFO': 0, 'WARNING': 0, 'SEVERE': 1}
+                mapping = {'info': 0, 'warning': 0, 'notice': 0, 'severe': 1}
                 df = df.replace({'labels': mapping})
-                print("df = ", df)
                 return (x_train, y_train), (x_test, y_test), df
 
             else:
@@ -173,7 +171,6 @@ class Preprocessor():
                     # print(i, x_data[i])
 
                 data_df['message'] = x_data
-                # print("here: ", data_df['message'])
 
                 if printing:
                     print("type of x_data: ", type(x_data))
@@ -226,13 +223,15 @@ class Preprocessor():
 
 
     def apply_Dim_Reduction(self, X, apply_pca=True, apply_tSNE=False, apply_umap=False):
-        print("Starting Principal Components Analysis...")
 
         if apply_pca:
+            print("Starting PCA Analysis...")
             X = PCA(n_components=2).fit_transform(X)
         elif apply_tSNE:
+            print("Starting t-SNE Analysis...")
             X = TSNE(n_components=2).fit_transform(X)
         else:
+            print("Starting UMAP Analysis...")
             X = UMAP(n_neighbors=15,
                       min_dist=0.1,
                       metric='correlation').fit_transform(X)
