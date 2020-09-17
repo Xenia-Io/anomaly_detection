@@ -20,7 +20,7 @@ class Tester():
 
 
     def run_isoForest(self):
-        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
+        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize, auto_encoder = False)
         preprocessor.preprocessing()
 
         print("x_all shape passed in iForest model: ", preprocessor.x_all.shape)
@@ -40,7 +40,7 @@ class Tester():
 
 
     def run_kMedians(self):
-        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
+        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize, auto_encoder = False)
         preprocessor.preprocessing()
 
         print('Starting fitting K-Medians model', preprocessor.x_all.shape)
@@ -137,7 +137,7 @@ class Tester():
 
 
     def run_kMeans(self):
-        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
+        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize, auto_encoder = False)
         preprocessor.preprocessing()
 
         print('Starting fitting K-Means model')
