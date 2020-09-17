@@ -6,6 +6,7 @@ from sklearn.utils import shuffle
 from feature_extractor import FeatureExtractor
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import time
+from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 import seaborn as sns
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
@@ -23,13 +24,17 @@ import re
 
 class Preprocessor():
 
-    def __init__(self, filename, supervised, visualize= True):
+    def __init__(self, filename, supervised, visualize= True, auto_encoder = True):
         self.supervised = supervised
-        (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
-        self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
-        self.x_all_trans_no_pca = []
-        self.x_all_median = []
         self.visualize = visualize
+
+        if auto_encoder:
+            self.df = self.load_data_supervised(filename)
+        else:
+            (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
+            self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
+            self.x_all_trans_no_pca = []
+            self.x_all_median = []
 
 
     def preprocessing(self, printing=False):
@@ -75,6 +80,81 @@ class Preprocessor():
                 self.visualize_pca_inputs()
                 self.visualize_tsne_inputs(self.x_all.shape[0])
 
+    # Thanks : https://www.kaggle.com/aashita/word-clouds-of-various-shapes ##
+    def plot_wordcloud(self, text, mask=None, max_words=200, max_font_size=100, figure_size=(12.0, 10.0),
+                       title=None, title_size=20, image_color=False):
+        stopwords = set(STOPWORDS)
+        more_stopwords = {'one', 'br', 'Po', 'th', 'sayi', 'fo', 'Unknown'}
+        stopwords = stopwords.union(more_stopwords)
+
+        wordcloud = WordCloud(background_color='black',
+                              stopwords=stopwords,
+                              max_words=max_words,
+                              max_font_size=max_font_size,
+                              random_state=42,
+                              width=800,
+                              height=400,
+                              mask=mask)
+        wordcloud.generate(str(text))
+
+        plt.figure(figsize=figure_size)
+        if image_color:
+            image_colors = ImageColorGenerator(mask);
+            plt.imshow(wordcloud.recolor(color_func=image_colors), interpolation="bilinear");
+            plt.title(title, fontdict={'size': title_size,
+                                       'verticalalignment': 'bottom'})
+        else:
+            plt.imshow(wordcloud);
+            plt.title(title, fontdict={'size': title_size, 'color': 'black',
+                                       'verticalalignment': 'bottom'})
+        plt.axis('off');
+        plt.tight_layout()
+        plt.show()
+
+
+    def load_data_supervised(self, log_file, train_ratio=0.7, printing=True):
+        print('====== Start loading the data ======')
+
+        if log_file.endswith('.json'):
+            with open(log_file) as json_file:
+                data = json.load(json_file)
+
+                # construct list of '_sources'
+                dict_of_lists = {}
+                messages = []
+                labels = []
+                for item in range(len(data['responses'][0]['hits']['hits'])):
+                    labels.append(data['responses'][0]['hits']['hits'][item]['_source']['severity'])
+                    messages.append(data['responses'][0]['hits']['hits'][item]['_source']['message'])
+                dict_of_lists['messages'] = messages
+                dict_of_lists['labels'] = labels
+
+            # Build the dataframe
+            df = pd.DataFrame(dict_of_lists, columns=['messages', 'labels'])
+
+            # Clean the messages from numbers and unwanted characters
+            x_data = df['messages'].values
+            for i in range(x_data.shape[0]):
+                x_data[i] = re.sub("[\(\[].*?[\)\]]", "", x_data[i])
+                x_data[i] = ''.join([i for i in x_data[i] if not i.isdigit()])
+            df['messages'] = x_data
+
+            # Mapping labels into integers
+            mapping = {'info': 0, 'warning': 0, 'notice': 0, 'severe': 1}
+            df = df.replace({'labels': mapping})
+
+            if printing:
+                print("Number of log messages in the dataset: ", df.shape[0])
+                print("Value counts for clean and fraud samples:\n", df.labels.value_counts())
+                print(df[df.labels==1].head(6))
+                print("Percentage of fraudulent logs:{}%".format(round((sum(df.labels == 1) * 100/len(df.labels)), 4)))
+
+            if self.visualize:
+                self.plot_wordcloud(df[df.labels == 0]["messages"], title="Word Cloud of normal messages")
+                self.plot_wordcloud(df[df.labels == 1]["messages"], title="Word Cloud of fraudulent messages")
+
+        else:
+            raise NotImplementedError('Function only supports json files!')
 
     def load_data(self, log_file, label_file=None, window='session', train_ratio=0.7, \
                   split_type='sequential', save_csv=False, window_size=0, printing=False):
