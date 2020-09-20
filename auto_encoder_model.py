@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import Normalizer, MinMaxScaler
 from sklearn.pipeline import Pipeline
 import seaborn as sns
+from umap import UMAP
 from sklearn.manifold import TSNE
 from mpl_toolkits.mplot3d import Axes3D
 sns.set(style='whitegrid', context='notebook')
@@ -86,8 +87,9 @@ class Autoencoder():
         if dimensions not in (2, 3):
             raise ValueError('tsne_scatter can only plot in 2d or 3d')
 
-        # t-SNE dimensionality reduction
-        features_embedded = TSNE(n_components=dimensions, random_state=RANDOM_SEED).fit_transform(list(features))
+        # dimensionality reduction
+        features_embedded = UMAP(n_neighbors=15, min_dist=0.1, metric='correlation').fit_transform(list(features))
+        # features_embedded = TSNE(n_components=dimensions, random_state=RANDOM_SEED).fit_transform(list(features))
 
         # initialising the plot
         fig, ax = plt.subplots(figsize=(8, 8))
