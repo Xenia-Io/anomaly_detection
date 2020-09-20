@@ -24,11 +24,12 @@ import re
 
 class Preprocessor():
 
-    def __init__(self, filename, supervised, visualize= True, auto_encoder = True):
+    def __init__(self, filename, supervised, visualize= True, auto_encoder = True, train_ratio = 0.7):
         self.supervised = supervised
         self.visualize = visualize
-
+        self.train_ratio = train_ratio
         if auto_encoder:
+            print("Start preprocessing for the Auto-Encoder..")
             self.df = self.load_data_supervised(filename)
         else:
             (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
@@ -112,7 +113,7 @@ class Preprocessor():
         plt.show()
 
 
-    def load_data_supervised(self, log_file, train_ratio=0.7, printing=True):
+    def load_data_supervised(self, log_file, train_ratio=0.7, printing=False):
         print('====== Start loading the data ======')
 
         if log_file.endswith('.json'):
@@ -152,6 +153,8 @@ class Preprocessor():
             if self.visualize:
                 self.plot_wordcloud(df[df.labels == 0]["messages"], title="Word Cloud of normal messages")
                 self.plot_wordcloud(df[df.labels == 1]["messages"], title="Word Cloud of fraudulent messages")
+
+            return df
 
         else:
             raise NotImplementedError('Function only supports json files!')
