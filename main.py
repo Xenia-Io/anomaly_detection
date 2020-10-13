@@ -3,8 +3,8 @@ from pre_processor import Preprocessor
 from auto_encoder import Autoencoder
 
 def main():
-    tester = Tester(20, 35, 'logs_lhcb.json',is_supervised=False, visualize=True)
-    # tester.run_isoForest()
+    tester = Tester(20, 35, 'logs_lhcb.json',is_supervised=False, visualize=False)
+    tester.run_isoForest()
     # tester.run_kMeans()
     # tester.run_kMedians()
 
