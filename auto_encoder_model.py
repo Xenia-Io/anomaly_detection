@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import Normalizer, MinMaxScaler
 from sklearn.pipeline import Pipeline
 import seaborn as sns
+from sklearn.decomposition import PCA
 from umap import UMAP
 from sklearn.manifold import TSNE
 from mpl_toolkits.mplot3d import Axes3D
@@ -83,13 +84,12 @@ class Autoencoder():
         return modified_z_score, threshold_value
 
 
-    def tsne_scatter(self, features, labels, dimensions=2):
+    def tsne_scatter(self, features, labels, dimensions=2, RANDOM_SEED = 42):
         if dimensions not in (2, 3):
             raise ValueError('tsne_scatter can only plot in 2d or 3d')
 
         # dimensionality reduction
-        features_embedded = UMAP(n_neighbors=15, min_dist=0.1, metric='correlation').fit_transform(list(features))
-        # features_embedded = TSNE(n_components=dimensions, random_state=RANDOM_SEED).fit_transform(list(features))
+        features_embedded = TSNE(n_components=dimensions, random_state=RANDOM_SEED).fit_transform(list(features))
 
         # initialising the plot
         fig, ax = plt.subplots(figsize=(8, 8))
@@ -117,13 +117,88 @@ class Autoencoder():
 
         # storing it to be displayed later
         plt.legend(loc='best')
+        plt.title('TSNE representation of clean and fraud instances')
         plt.show()
+
+
+    def umap_scatter(self, features, labels, dimensions=2):
+            if dimensions not in (2, 3):
+                raise ValueError('umap_scatter can only plot in 2d or 3d')
+
+            # dimensionality reduction
+            features_embedded = UMAP(n_neighbors=15, min_dist=0.1, metric='correlation').fit_transform(list(features))
+
+            # initialising the plot
+            fig, ax = plt.subplots(figsize=(8, 8))
+
+            # counting dimensions
+            if dimensions == 3: ax = fig.add_subplot(111, projection='3d')
+
+            # plotting data
+            ax.scatter(
+                *zip(*features_embedded[np.where(labels == 1)]),
+                marker='o',
+                color='r',
+                s=10,
+                alpha=0.99,
+                label='Fraud'
+            )
+            ax.scatter(
+                *zip(*features_embedded[np.where(labels == 0)]),
+                marker='o',
+                color='g',
+                s=10,
+                alpha=0.99,
+                label='Clean'
+            )
+
+            # storing it to be displayed later
+            plt.legend(loc='best')
+            plt.title('UMAP representation for clean and fraud instances')
+            plt.show()
+
+
+    def pca_scatter(self, features, labels, dimensions=2):
+            if dimensions not in (2, 3):
+                raise ValueError('pca_scatter can only plot in 2d or 3d')
+
+            # dimensionality reduction
+            features_embedded = PCA(n_components=dimensions).fit_transform(list(features))
+
+            # initialising the plot
+            fig, ax = plt.subplots(figsize=(8, 8))
+
+            # counting dimensions
+            if dimensions == 3: ax = fig.add_subplot(111, projection='3d')
+
+            # plotting data
+            ax.scatter(
+                *zip(*features_embedded[np.where(labels == 1)]),
+                marker='o',
+                color='r',
+                s=10,
+                alpha=0.99,
+                label='Fraud'
+            )
+            ax.scatter(
+                *zip(*features_embedded[np.where(labels == 0)]),
+                marker='o',
+                color='g',
+                s=10,
+                alpha=0.99,
+                label='Clean'
+            )
+
+            # storing it to be displayed later
+            plt.legend(loc='best')
+            plt.title('PCA representation for clean and fraud instances')
+            plt.show()
 
 
 if __name__ == "__main__":
 
     # Preprocessing the dataset
-    preprocessor = Preprocessor('big_dataset.json', True, True)
+    preprocessor = Preprocessor('big_dataset.json', True, True, dnn = False)
     preprocessor.preprocessing()
     print("DEBUG_ AUTOENCODER AFTER PREPROCESSING: ", preprocessor.x_train.shape, preprocessor.x_test.shape)
 
@@ -219,6 +294,8 @@ if __name__ == "__main__":
 
     data_subset = visualisation_initial.messages.values
     model_.tsne_scatter(data_subset, labels, dimensions=2)
+    model_.pca_scatter(data_subset, labels)
+    model_.umap_scatter(data_subset, labels)
 
     # Train the model
     history = model.fit(
