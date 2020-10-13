@@ -24,12 +24,12 @@ import re
 
 class Preprocessor():
 
-    def __init__(self, filename, supervised, visualize= True, auto_encoder = True, train_ratio = 0.7):
+    def __init__(self, filename, supervised, visualize= True, dnn = True, train_ratio = 0.7):
         self.supervised = supervised
         self.visualize = visualize
         self.train_ratio = train_ratio
-        if auto_encoder:
-            print("Start preprocessing for the Auto-Encoder..")
+        if dnn:
+            print("Start preprocessing for the Deep Neural Network..")
             self.df = self.load_data_supervised(filename)
         else:
             (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
@@ -153,6 +153,10 @@ class Preprocessor():
             if self.visualize:
                 self.plot_wordcloud(df[df.labels == 0]["messages"], title="Word Cloud of normal messages")
                 self.plot_wordcloud(df[df.labels == 1]["messages"], title="Word Cloud of fraudulent messages")
+
+                feature_extractor = FeatureExtractor()
+                X = feature_extractor.fit_transform(df.messages.values, term_weighting='tf-idf')
+                self.visualize_inputs_(X)
 
             return df
 
