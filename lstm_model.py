@@ -4,23 +4,43 @@ from time import time
 import multiprocessing
 from pre_processor import Preprocessor
 import seaborn as sns
+from umap import UMAP
 sns.set(style='whitegrid', context='notebook')
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set(style='whitegrid', context='notebook')
 import pandas as pd
 import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 import gensim
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation
 from tensorflow.keras.models import Model, Sequential
 
 
+
 class LSTM_Model():
 
-    def __init__(self, epochs= 5, optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,\
+    def __init__(self, epochs= 3, optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,\
                  epsilon=0, w_decay=0, momentum=0, dropout=0, embed_size = 300, max_features = 10000,\
                  maxlen = 200):
+        """
+        Credits to: https://gist.github.com/maxim5/c35ef2238ae708ccb0e55624e9e0252b
+        :param epochs:
+        :param optimizer:
+        :param loss:
+        :param batch_size:
+        :param kernel_init:
+        :param gamma:
+        :param epsilon:
+        :param w_decay:
+        :param momentum:
+        :param dropout:
+        :param embed_size:
+        :param max_features:
+        :param maxlen:
+        """
         self.optimizer = optimizer
         self.batch_size = batch_size
         self.epochs = epochs
@@ -36,7 +56,8 @@ class LSTM_Model():
         self.maxlen = maxlen  # max number of words in a log message to use
 
 
-    def build_autoencoder(self, X, vocab_size, emdedding_size):
+    def build_lstm(self, X, vocab_size, emdedding_size, pretrained_weights):
+        print("... Start building LSTM model ...", X.shape)
         model = Sequential()
         model.add(Embedding(input_dim=vocab_size, output_dim=emdedding_size, weights=[pretrained_weights]))
         model.add(LSTM(units=emdedding_size))
@@ -44,6 +65,7 @@ class LSTM_Model():
         model.add(Activation('relu'))
 
         return model
+
 
     def word2idx(self, word_model, word):
         try:
@@ -57,6 +79,145 @@ class LSTM_Model():
 
     def idx2word(self, word_model, idx):
         return word_model.wv.index2word[idx]
+
+
+    def tsne_scatter(self, features, labels, dimensions=2, RANDOM_SEED = 42):
+        if dimensions not in (2, 3):
+            raise ValueError('tsne_scatter can only plot in 2d or 3d')
+
+        # dimensionality reduction
+        features_embedded = TSNE(n_components=dimensions, random_state=RANDOM_SEED).fit_transform(list(features))
+
+        # initialising the plot
+        fig, ax = plt.subplots(figsize=(8, 8))
+
+        # counting dimensions
+        if dimensions == 3: ax = fig.add_subplot(111, projection='3d')
+
+        # plotting data
+        ax.scatter(
+            *zip(*features_embedded[np.where(labels == 1)]),
+            marker='o',
+            color='r',
+            s=20,
+            alpha=0.99,
+            label='Fraud'
+        )
+        ax.scatter(
+            *zip(*features_embedded[np.where(labels == 0)]),
+            marker='o',
+            color='g',
+            s=20,
+            alpha=0.99,
+            label='Clean'
+        )
+
+        # storing it to be displayed later
+        plt.legend(loc='best')
+        plt.title('TSNE representation of clean and fraud instances')
+        plt.show()
+
+
+    def umap_scatter(self, features, labels, dimensions=2):
+            if dimensions not in (2, 3):
+                raise ValueError('umap_scatter can only plot in 2d or 3d')
+
+            # dimensionality reduction
+            features_embedded = UMAP(n_neighbors=15, min_dist=0.1, metric='correlation').fit_transform(list(features))
+
+            # initialising the plot
+            fig, ax = plt.subplots(figsize=(8, 8))
+
+            # counting dimensions
+            if dimensions == 3: ax = fig.add_subplot(111, projection='3d')
+
+            # plotting data
+            ax.scatter(
+                *zip(*features_embedded[np.where(labels == 1)]),
+                marker='o',
+                color='r',
+                s=10,
+                alpha=0.99,
+                label='Fraud'
+            )
+            ax.scatter(
+                *zip(*features_embedded[np.where(labels == 0)]),
+                marker='o',
+                color='g',
+                s=10,
+                alpha=0.99,
+                label='Clean'
+            )
+
+            # storing it to be displayed later
+            plt.legend(loc='best')
+            plt.title('UMAP representation for clean and fraud instances')
+            plt.show()
+
+
+    def pca_scatter(self, features, labels, dimensions=2):
+            if dimensions not in (2, 3):
+                raise ValueError('pca_scatter can only plot in 2d or 3d')
+
+            # dimensionality reduction
+            features_embedded = PCA(n_components=dimensions).fit_transform(list(features))
+
+            # initialising the plot
+            fig, ax = plt.subplots(figsize=(8, 8))
+
+            # counting dimensions
+            if dimensions == 3: ax = fig.add_subplot(111, projection='3d')
+
+            # plotting data
+            ax.scatter(
+                *zip(*features_embedded[np.where(labels == 1)]),
+                marker='o',
+                color='r',
+                s=10,
+                alpha=0.99,
+                label='Fraud'
+            )
+            ax.scatter(
+                *zip(*features_embedded[np.where(labels == 0)]),
+                marker='o',
+                color='g',
+                s=10,
+                alpha=0.99,
+                label='Clean'
+            )
+
+            # storing it to be displayed later
+            plt.legend(loc='best')
+            plt.title('PCA representation for clean and fraud instances')
+            plt.show()
+
+
+    def detect_mad_outliers(self, points, threshold=3.5):
+        # calculate the median of the input array
+        print("points_______________ ", points)
+        median = np.median(points, axis=0)
+
+        # calculate the absolute difference of each data point to the calculated median
+        deviation = np.abs(points - median)
+
+        # take the median of those absolute differences
+        med_abs_deviation = np.median(deviation)
+
+        # 0.6745 is the 0.75th quartile of the standard normal distribution,
+        # to which the MAD converges.
+        modified_z_score = 0.6745 * deviation / med_abs_deviation
+
+        # return as extra information what the original mse value was at which the threshold is hit
+        # need to find a way to compute this mathematically, but I'll just use the index of the nearest candidate for now
+        idx = (np.abs(modified_z_score - threshold)).argmin()
+        print("idx 1: ", idx)
+        if idx >= len(points):
+            idx = np.argmin(points)
+        print("idx 2: ", idx)
+        threshold_value = points[idx]
+
+        return modified_z_score, threshold_value
+
 
 
 class SequenceIterator:
@@ -120,7 +281,7 @@ if __name__ == "__main__":
     # print(tf.keras.__version__)
 
     # Preprocessing the dataset
-    preprocessor = Preprocessor('big_dataset.json', True, visualize= False, auto_encoder = True)
+    preprocessor = Preprocessor('big_dataset.json', True, visualize= True, dnn = True)
     df_copy = preprocessor.df.copy()
     messages = preprocessor.df['messages'].values
 
@@ -177,6 +338,7 @@ if __name__ == "__main__":
                clean (rows, cols) = {clean.shape}
                fraud (rows, cols) = {fraud.shape}""")
 
+
     # Data preparation: build train and test datasets
     # training set: exlusively non-fraud transactions
     num_train = int(preprocessor.train_ratio * clean.shape[0])
@@ -190,9 +352,9 @@ if __name__ == "__main__":
     # X_test = X_test.drop('labels', axis=1)
 
     print(f"""Shape of the datasets:
-                   X_train (rows, cols) = {X_train.shape}
-                   X_test (rows, cols) = {X_test.shape}""")
-    print("xxx 1 :", type(X_train), X_train.shape, len(X_train['messages'][0]))
+                   training set (rows, cols) = {df_copy_train.shape}
+                   test set (rows, cols) = {df_copy_test.shape}""")
+    # print("xxx 1 :", type(X_train), X_train.shape, len(X_train['messages'][0]))
 
     # Build auto-encoder
     lstm = LSTM_Model()
@@ -220,9 +382,11 @@ if __name__ == "__main__":
     # Padding sequences with 0.
     set_x = pad_sequences(set_x, maxlen=lstm.maxlen, padding='pre', value=0)
     set_y = np.array(set_y)
+    print("set_y[0] = ", set_y[0])
     set_x_test = pad_sequences(set_x_test, maxlen=55, padding='pre', value=0)
     set_y_test = np.array(set_y_test)
 
+    print("set_x is this one: ", set_x)
     print("set_x.shape: ", set_x.shape, type(set_x))
     print("set_y.shape: ", set_y.shape, type(set_y))
 
@@ -239,8 +403,10 @@ if __name__ == "__main__":
 
     random_i = random.sample(range(total_samples), total_samples)
     random_j = random.sample(range(total_samples_test), total_samples_test)
+    print("random_i = ", len(random_i), random_i)
     # clean.iloc[0:num_train]
-    print("POPI: ", df_copy_train.shape)
+    print("df_copy_train.shape: ", df_copy_train.shape)
+    print("df_copy_train : ", df_copy_train)
     train_x = set_x[random_i[:n_train]]
     train_y = set_y[random_i[:n_train]]
     val_x = set_x[random_i[n_train:n_train + n_val]]
@@ -248,18 +414,32 @@ if __name__ == "__main__":
     test_x = set_x_test[random_j[:n_test]]
     test_y = set_y_test[random_j[:n_test]]
 
-
+    print("train_x ==== ", train_x)
     print("Train Shapes - X: {} - Y: {}".format(train_x.shape, train_y.shape))
     print("Val Shapes - X: {} - Y: {}".format(val_x.shape, val_y.shape))
     print("Test Shapes - X: {} - Y: {}".format(test_x.shape, test_y.shape))
     print(df_copy_test[df_copy_test.labels == 1])
 
     # Compile model
-    model_ = lstm.build_autoencoder(train_x, vocab_size, emdedding_size)
+    model_ = lstm.build_lstm(train_x, vocab_size, emdedding_size, pretrained_weights)
     model_.compile(loss='binary_crossentropy', optimizer='adam')
     # # model_.compile(optimizer='adam', loss='mse')
     model_.summary()
-    print("HEREEEE..............", test_x.shape)
+    print("test_x.shape: ", test_x.shape)
+
+    # # Visualization
+    # visualisation_initial = pd.concat([fraud, clean])
+    # column_names = list(visualisation_initial.drop('labels', axis=1).columns)
+    #
+    # # isolate features from labels
+    # features, labels = visualisation_initial.drop('labels', axis=1).values, visualisation_initial.labels.values
+    #
+    #
+    # data_subset = visualisation_initial.messages.values
+    # # lstm.tsne_scatter(data_subset, labels, dimensions=2)
+    # # lstm.pca_scatter(data_subset, labels)
+    # lstm.umap_scatter(data_subset, labels)
+
     # Train the model
     history = model_.fit(
         train_x, train_y,
@@ -289,3 +469,54 @@ if __name__ == "__main__":
     print(mse[np.where(test_y == 0)][:5])
     print(f'\nMean Squared Error reconstruction losses for {5} fraudulent transactions:')
     print(mse[np.where(test_y == 1)][:5])
+
+    # adjust this parameter to customise the recall/precision trade-off
+    Z_SCORE_THRESHOLD = 3
+
+    # find the outliers on our reconstructions' mean squared errors
+    mad_z_scores, threshold_value = lstm.detect_mad_outliers(mse, threshold=Z_SCORE_THRESHOLD)
+    mad_outliers = (mad_z_scores > Z_SCORE_THRESHOLD).astype(int)
+    print("mad outliers of our reconstructions' MSE: ", mad_outliers)
+
+    anomalies = len(mad_outliers[mad_outliers == True])
+    total_trades = len(test_y)
+    d = (anomalies / total_trades * 100)
+
+    print("MAD Z-score > ", Z_SCORE_THRESHOLD, " is the selected threshold.")
+    print("Any trade with a MSRE >= ", threshold_value, " is flagged.")
+    print("This results in", anomalies, "detected anomalies, or ", d, "% out of ", total_trades, "trades reported")
+
+    data = np.column_stack((range(len(mse)), mse))
+    print("data =", type(data), data)
+    # scatter's x & y
+    clean_x, clean_y = data[test_y == 0][:, 0], data[test_y == 0][:, 1]
+    fraud_x, fraud_y = data[test_y == 1][:, 0], data[test_y == 1][:, 1]
+    print("clean x,y : ", clean_x, clean_y)
+    print("fraud x,y : ", fraud_x, fraud_y)
+
+    # instantiate new figure
+    fig, ax = plt.subplots(figsize=(15, 8))
+
+    # plot reconstruction errors
+    ax.scatter(clean_x, clean_y, s=20, color='g', alpha=0.6, label='Clean')
+    ax.scatter(fraud_x, fraud_y, s=30, color='r', alpha=1, label='Fraud')
+
+    # MAD threshold line
+    ax.plot([threshold_value for i in range(len(mse))], color='orange', linewidth=1.5,
+            label='MAD threshold')
+
+    # change scale to log & limit x-axis range
+    ax.set_yscale('log')
+    ax.set_xlim(0, (len(mse) + 100))
+
+    # title & labels
+    fig.suptitle('Mean Squared Reconstruction Errors & MAD Threshold', fontsize=14)
+    ax.set_xlabel('Pseudo Message ID\n(Index in MSE List)')
+    ax.set_ylabel('Mean Squared Error\n(Log Scale)')
+
+    # orange legend for threshold value
+    ax.legend(loc='lower left', prop={'size': 9})
+
+    # display
+    fig.show()
+    plt.show()
