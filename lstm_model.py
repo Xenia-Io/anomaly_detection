@@ -281,7 +281,7 @@ if __name__ == "__main__":
     # print(tf.keras.__version__)
 
     # Preprocessing the dataset
-    preprocessor = Preprocessor('big_dataset.json', True, visualize= True, dnn = True)
+    preprocessor = Preprocessor('big_dataset.json', True, visualize= False, dnn = True)
     df_copy = preprocessor.df.copy()
     messages = preprocessor.df['messages'].values
 
@@ -384,6 +384,7 @@ if __name__ == "__main__":
     set_y = np.array(set_y)
     print("set_y[0] = ", set_y[0])
     set_x_test = pad_sequences(set_x_test, maxlen=55, padding='pre', value=0)
+    set_x_test_2 = pad_sequences(set_x_test, maxlen=lstm.maxlen, padding='pre', value=0)
     set_y_test = np.array(set_y_test)
 
     print("set_x is this one: ", set_x)
@@ -427,18 +428,22 @@ if __name__ == "__main__":
     model_.summary()
     print("test_x.shape: ", test_x.shape)
 
-    # # Visualization
-    # visualisation_initial = pd.concat([fraud, clean])
-    # column_names = list(visualisation_initial.drop('labels', axis=1).columns)
-    #
-    # # isolate features from labels
-    # features, labels = visualisation_initial.drop('labels', axis=1).values, visualisation_initial.labels.values
-    #
-    #
-    # data_subset = visualisation_initial.messages.values
-    # # lstm.tsne_scatter(data_subset, labels, dimensions=2)
-    # # lstm.pca_scatter(data_subset, labels)
-    # lstm.umap_scatter(data_subset, labels)
+    # Visualization
+    visualisation_initial = np.concatenate([set_x, set_x_test_2])
+    visual_initial_y = np.concatenate([set_y, set_y_test])
+    visual_dict = {'messages': list(visualisation_initial), 'labels': list(visual_initial_y)}
+
+    visual_df = pd.DataFrame(visual_dict, columns=['messages', 'labels'])
+    print("Debug : ", visualisation_initial.shape, visual_initial_y.shape)
+    print(visual_df)
+
+    # isolate features from labels
+    features, labels = visual_df.drop('labels', axis=1).values, visual_df.labels.values
+
+    data_subset = visual_df.messages.values
+    lstm.tsne_scatter(data_subset, labels, dimensions=2)
+    lstm.pca_scatter(data_subset, labels)
+    lstm.umap_scatter(data_subset, labels)
 
     # Train the model
     history = model_.fit(

@@ -407,6 +407,7 @@ if __name__ == "__main__":
     set_x = pad_sequences(set_x, maxlen=autoencoder.maxlen, padding='pre', value=0)
     set_y = np.array(set_y)
     set_x_test = pad_sequences(set_x_test, maxlen=55, padding='pre', value=0)
+    set_x_test_2 = pad_sequences(set_x_test, maxlen=autoencoder.maxlen, padding='pre', value=0)
     set_y_test = np.array(set_y_test)
 
     print("set_x.shape: ", set_x.shape, type(set_x))
@@ -426,7 +427,6 @@ if __name__ == "__main__":
 
     random_i = random.sample(range(total_samples), total_samples)
     random_j = random.sample(range(total_samples_test), total_samples_test)
-    # clean.iloc[0:num_train]
     print("df_copy_train.shape: ", df_copy_train.shape)
     train_x = set_x[random_i[:n_train]]
     train_y = set_y[random_i[:n_train]]
@@ -460,17 +460,22 @@ if __name__ == "__main__":
     vae.summary()
     print("test_x.shape: ", test_x.shape)
 
-    # # Visualization
-    # visualisation_initial = pd.concat([fraud, clean])
-    # column_names = list(visualisation_initial.drop('labels', axis=1).columns)
-    #
-    # # isolate features from labels
-    # features, labels = visualisation_initial.drop('labels', axis=1).values, visualisation_initial.labels.values
-    #
-    # data_subset = visualisation_initial.messages.values
-    # lstm.tsne_scatter(data_subset, labels, dimensions=2)
-    # lstm.pca_scatter(data_subset, labels)
-    # lstm.umap_scatter(data_subset, labels)
+    # Visualization
+    visualisation_initial = np.concatenate([set_x, set_x_test_2])
+    visual_initial_y = np.concatenate([set_y, set_y_test])
+    visual_dict = {'messages': list(visualisation_initial), 'labels': list(visual_initial_y)}
+
+    visual_df = pd.DataFrame(visual_dict, columns=['messages', 'labels'])
+    print("Debug : ", visualisation_initial.shape, visual_initial_y.shape)
+    print(visual_df)
+
+    # isolate features from labels
+    features, labels = visual_df.drop('labels', axis=1).values, visual_df.labels.values
+
+    data_subset = visual_df.messages.values
+    autoencoder.tsne_scatter(data_subset, labels, dimensions=2)
+    autoencoder.pca_scatter(data_subset, labels)
+    autoencoder.umap_scatter(data_subset, labels)
 
     # Train the model
     # history = vae.fit(
@@ -495,8 +500,7 @@ if __name__ == "__main__":
     ax.legend(loc='upper right')
     plt.show()
 
-    # Test the models
-
+    # Test the mode
     reconstructions = vae.predict(test_x)
     print("HERE..............  ::: ", reconstructions.shape, test_x.shape)
     # calculating the mean squared error reconstruction loss per row in the numpy array
