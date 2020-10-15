@@ -27,7 +27,7 @@ from tensorflow.keras.models import Model, Sequential
 
 class Autoencoder_Model():
 
-    def __init__(self, epsilon_std=1, timesteps = 1, epochs= 3, latent_dim = 32, intermediate_dim = 96, \
+    def __init__(self, epsilon_std=1, timesteps = 1, epochs= 2, latent_dim = 32, intermediate_dim = 96, \
                  optimizer='adam', loss='mae', batch_size=1, kernel_init=0, gamma=0, epsilon=0, \
                  w_decay=0, momentum=0, dropout=0, embed_size = 300, max_features = 10000, maxlen = 200):
         self.optimizer = optimizer
@@ -79,7 +79,8 @@ class Autoencoder_Model():
         # we instantiate these layers separately so as to reuse them later
         repeated_context = RepeatVector(emdedding_size)
         decoder_h = LSTM(self.intermediate_dim, return_sequences=True, recurrent_dropout=0.2)
-        decoder_mean = TimeDistributed(Dense(vocab_size, activation='linear'))
+        # decoder_mean = TimeDistributed(Dense(vocab_size, activation='linear'))
+        decoder_mean = Dense(vocab_size, activation='linear')
         h_decoded = decoder_h(repeated_context(z))
         x_decoded_mean = decoder_mean(h_decoded)
 
@@ -474,8 +475,11 @@ if __name__ == "__main__":
 
     data_subset = visual_df.messages.values
     autoencoder.tsne_scatter(data_subset, labels, dimensions=2)
-    autoencoder.pca_scatter(data_subset, labels)
-    autoencoder.umap_scatter(data_subset, labels)
+    # autoencoder.pca_scatter(data_subset, labels)
+    # autoencoder.umap_scatter(data_subset, labels)
+
+    dot_img_file = 'model_2.png'
+    tf.keras.utils.plot_model(vae, to_file=dot_img_file, show_shapes=True)
 
     # Train the model
     # history = vae.fit(

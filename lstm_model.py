@@ -14,6 +14,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import gensim
+import tensorflow as tf
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation
 from tensorflow.keras.models import Model, Sequential
@@ -441,9 +442,12 @@ if __name__ == "__main__":
     features, labels = visual_df.drop('labels', axis=1).values, visual_df.labels.values
 
     data_subset = visual_df.messages.values
-    lstm.tsne_scatter(data_subset, labels, dimensions=2)
-    lstm.pca_scatter(data_subset, labels)
-    lstm.umap_scatter(data_subset, labels)
+    # lstm.tsne_scatter(data_subset, labels, dimensions=2)
+    # lstm.pca_scatter(data_subset, labels)
+    # lstm.umap_scatter(data_subset, labels)
+
+    dot_img_file = 'model_2_lstm.png'
+    tf.keras.utils.plot_model(model_, to_file=dot_img_file, show_shapes=True)
 
     # Train the model
     history = model_.fit(
