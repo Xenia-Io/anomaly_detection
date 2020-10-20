@@ -300,7 +300,7 @@ if __name__ == "__main__":
     print("After gensim cleaning preprocessor.df[0]: ", preprocessor.df['messages'][0])
 
 
-    w2v_model = gensim.models.Word2Vec(size=200, window=5, min_count=1, workers=10)
+    w2v_model = gensim.models.Word2Vec(size=64, window=5, min_count=1, workers=10)
     t = time()
 
     w2v_model.build_vocab(messages, progress_per=10000)
@@ -446,8 +446,8 @@ if __name__ == "__main__":
     # lstm.pca_scatter(data_subset, labels)
     # lstm.umap_scatter(data_subset, labels)
 
-    dot_img_file = 'model_2_lstm.png'
-    tf.keras.utils.plot_model(model_, to_file=dot_img_file, show_shapes=True)
+    # dot_img_file = 'model_2_lstm.png'
+    # tf.keras.utils.plot_model(model_, to_file=dot_img_file, show_shapes=True)
 
     # Train the model
     history = model_.fit(

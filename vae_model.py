@@ -29,7 +29,7 @@ class Autoencoder_Model():
 
     def __init__(self, epsilon_std=1, timesteps = 1, epochs= 2, latent_dim = 32, intermediate_dim = 96, \
                  optimizer='adam', loss='mae', batch_size=1, kernel_init=0, gamma=0, epsilon=0, \
-                 w_decay=0, momentum=0, dropout=0, embed_size = 300, max_features = 10000, maxlen = 200):
+                 w_decay=0, momentum=0, dropout=0, embed_size = 300, max_features = 10000, maxlen = 64):
         self.optimizer = optimizer
         self.batch_size = batch_size
         self.epochs = epochs
@@ -52,17 +52,20 @@ class Autoencoder_Model():
 
     def build_autoencoder(self, X, vocab_size, emdedding_size, pretrained_weights):
         print("\n ...Start building VAE with X.shape: ...", X.shape)
+        batch_size = self.batch_size
+        maxlen = self.maxlen
 
         # x = Input(batch_shape=(None, emdedding_size))
         x = Input(batch_shape=(self.timesteps, emdedding_size,))
         print("X shape now : ", x.shape)
+        print("pretrained_weights shape now : ", pretrained_weights.shape)
         x_embed = Embedding(input_dim=vocab_size, output_dim=emdedding_size, weights=[pretrained_weights],
                              trainable=False)(x)
         print("X shape now : ", x_embed.shape)
         h = LSTM(self.intermediate_dim, return_sequences=False, recurrent_dropout=0.2)(x_embed)
         h = Dropout(0.2)(h)
         h = Dense(self.intermediate_dim, activation='linear')(h)
-        h = Activation('relu')(h)
+        h = Activation('softmax')(h)
         h = Dropout(0.2)(h)
         z_mean = Dense(self.latent_dim)(h)
         z_log_var = Dense(self.latent_dim)(h)
@@ -80,16 +83,66 @@ class Autoencoder_Model():
         repeated_context = RepeatVector(emdedding_size)
         decoder_h = LSTM(self.intermediate_dim, return_sequences=True, recurrent_dropout=0.2)
         # decoder_mean = TimeDistributed(Dense(vocab_size, activation='linear'))
-        decoder_mean = Dense(vocab_size, activation='linear')
+        decoder_mean = Dense(64, activation='linear')
         h_decoded = decoder_h(repeated_context(z))
         x_decoded_mean = decoder_mean(h_decoded)
 
+        # placeholder loss
+        def zero_loss(y_true, y_pred):
+            return bck.zeros_like(y_pred)
+
+        # Custom VAE loss layer
+        class CustomVariationalLayer(Layer):
+            def __init__(self, **kwargs):
+                self.is_placeholder = True
+                super(CustomVariationalLayer, self).__init__(**kwargs)
+                self.target_weights = tf.constant(np.ones((batch_size, maxlen)), tf.float32)
+
+            def vae_loss(self, x, x_decoded_mean):
+                # xent_loss = K.sum(metrics.categorical_crossentropy(x, x_decoded_mean), axis=-1)
+                labels = tf.cast(x, tf.int32)
+                xent_loss = bck.sum(tfa.seq2seq.sequence_loss(x_decoded_mean, labels,
+                                                                   weights=self.target_weights,
+                                                                   average_across_timesteps=False,
+                                                                   average_across_batch=False), axis=-1)
+
+                kl_loss = - 0.5 * bck.sum(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var), axis=-1)
+                return bck.mean(xent_loss + kl_loss)
+
+            def call(self, inputs):
+                x = inputs[0]
+                x_decoded_mean = inputs[1]
+                print(x.shape, x_decoded_mean.shape)
+                loss = self.vae_loss(x, x_decoded_mean)
+                self.add_loss(loss, inputs=inputs)
+                # we don't use this output, but it has to have the correct shape:
+                return bck.ones_like(x)
+
+        loss_layer = CustomVariationalLayer()([x, x_decoded_mean])
+        # def vae_loss(x, x_decoded_mean):
+        #     xent_loss = tf_losses.MSE(x, x_decoded_mean)
+        #     kl_loss = - 0.5 * bck.mean(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var))
+        #     loss = xent_loss + kl_loss
+        #     return loss
+
         # end-to-end autoencoder
-        vae = Model(x, x_decoded_mean)
+        vae = Model(x, [loss_layer])
+        # vae = Model(x, x_decoded_mean)
 
-        vae.compile(optimizer='rmsprop', loss=tf.keras.losses.KLDivergence())
+        # encoder, from inputs to latent space
+        encoder = Model(x, z_mean)
 
-        return vae
+        # decoder
+        decoder_input = Input(shape=(self.latent_dim,))
+        _h_decoded = decoder_h(repeated_context(decoder_input))
+        _x_decoded_mean = decoder_mean(_h_decoded)
+        _x_decoded_mean = Activation('softmax')(_x_decoded_mean)
+        decoder = Model(decoder_input, _x_decoded_mean)
+
+        vae.compile(optimizer='adam', loss=[zero_loss])
+        # vae.compile(optimizer='adam', loss=vae_loss)
+
+        return vae, encoder, decoder
 
 
     def detect_mad_outliers(self, points, threshold=3.5):
@@ -292,6 +345,7 @@ class SequenceIterator:
 
 
 if __name__ == "__main__":
+    tf.config.experimental_run_functions_eagerly(True)
     print(tf.__version__)
     #
     # print("Is there a GPU available: "),
@@ -323,7 +377,8 @@ if __name__ == "__main__":
     print("After gensim cleaning preprocessor.df[0]: ", preprocessor.df['messages'][0])
 
 
-    w2v_model = gensim.models.Word2Vec(size=200, window=5, min_count=1, workers=10)
+    # w2v_model = gensim.models.Word2Vec(size=200, window=5, min_count=1, workers=10)
+    w2v_model = gensim.models.Word2Vec(size=64, window=5, min_count=1, workers=10)
     t = time()
 
     w2v_model.build_vocab(messages, progress_per=10000)
@@ -448,16 +503,7 @@ if __name__ == "__main__":
     print("train_x shape: ", train_x.shape)
 
     # Compile model
-    vae = autoencoder.build_autoencoder(train_x, vocab_size, emdedding_size, pretrained_weights)
-
-
-    # def vae_loss(x, x_decoded_mean):
-    #     xent_loss = bck.mse(x, x_decoded_mean)
-    #     kl_loss = - 0.5 * bck.mean(1 + z_log_sigma - bck.square(z_mean) - bck.exp(z_log_sigma))
-    #     loss = xent_loss + kl_loss
-    #     return loss
-
-    # vae.compile(optimizer='adam', loss='binary_crossentropy')
+    vae, encoder, decoder = autoencoder.build_autoencoder(train_x, vocab_size, emdedding_size, pretrained_weights)
     vae.summary()
     print("test_x.shape: ", test_x.shape)
 
@@ -474,7 +520,7 @@ if __name__ == "__main__":
     features, labels = visual_df.drop('labels', axis=1).values, visual_df.labels.values
 
     data_subset = visual_df.messages.values
-    autoencoder.tsne_scatter(data_subset, labels, dimensions=2)
+    # autoencoder.tsne_scatter(data_subset, labels, dimensions=2)
     # autoencoder.pca_scatter(data_subset, labels)
     # autoencoder.umap_scatter(data_subset, labels)
 
@@ -494,7 +540,7 @@ if __name__ == "__main__":
         batch_size=autoencoder.batch_size,
         shuffle=True, validation_split=0.3
     ).history
-    #
+
     # Plot the training and validation loss
     fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
     ax.plot(history['loss'], 'b', label='Train', linewidth=2)
@@ -505,65 +551,65 @@ if __name__ == "__main__":
     plt.show()
 
     # Test the mode
-    reconstructions = vae.predict(test_x)
+    reconstructions = vae.predict(train_x)
     print("HERE..............  ::: ", reconstructions.shape, test_x.shape)
     # calculating the mean squared error reconstruction loss per row in the numpy array
-    mse = np.mean(np.power(test_x - reconstructions, 2), axis=1)
+    mse = np.mean(np.power(train_x - reconstructions, 2), axis=1)
 
     # showing the reconstruction losses for a subsample of transactions
     print(f'Mean Squared Error reconstruction losses for {5} clean transactions:')
-    print(mse[np.where(test_y == 0)][:5])
+    print(mse[np.where(train_y == 0)][:5])
     print(f'\nMean Squared Error reconstruction losses for {5} fraudulent transactions:')
-    print(mse[np.where(test_y == 1)][:5])
+    print(mse[np.where(train_y == 1)][:5])
 
-    # adjust this parameter to customise the recall/precision trade-off
-    Z_SCORE_THRESHOLD = 3
-
-    # find the outliers on our reconstructions' mean squared errors
-    mad_z_scores, threshold_value = vae.detect_mad_outliers(mse, threshold=Z_SCORE_THRESHOLD)
-    mad_outliers = (mad_z_scores > Z_SCORE_THRESHOLD).astype(int)
-    print("mad outliers of our reconstructions' MSE: ", mad_outliers)
-
-    anomalies = len(mad_outliers[mad_outliers == True])
-    total_trades = len(test_y)
-    d = (anomalies / total_trades * 100)
-
-    print("MAD Z-score > ", Z_SCORE_THRESHOLD, " is the selected threshold.")
-    print("Any trade with a MSRE >= ", threshold_value, " is flagged.")
-    print("This results in", anomalies, "detected anomalies, or ", d, "% out of ", total_trades, "trades reported")
-
-    data = np.column_stack((range(len(mse)), mse))
-    print("data =", type(data), data)
-    # scatter's x & y
-    clean_x, clean_y = data[test_y == 0][:, 0], data[test_y == 0][:, 1]
-    fraud_x, fraud_y = data[test_y == 1][:, 0], data[test_y == 1][:, 1]
-    print("clean x,y : ", clean_x, clean_y)
-    print("fraud x,y : ", fraud_x, fraud_y)
-
-    # instantiate new figure
-    fig, ax = plt.subplots(figsize=(15, 8))
-
-    # plot reconstruction errors
-    ax.scatter(clean_x, clean_y, s=20, color='g', alpha=0.6, label='Clean')
-    ax.scatter(fraud_x, fraud_y, s=30, color='r', alpha=1, label='Fraud')
-
-    # MAD threshold line
-    ax.plot([threshold_value for i in range(len(mse))], color='orange', linewidth=1.5,
-            label='MAD threshold')
-
-    # change scale to log & limit x-axis range
-    ax.set_yscale('log')
-    ax.set_xlim(0, (len(mse) + 100))
-
-    # title & labels
-    fig.suptitle('Mean Squared Reconstruction Errors & MAD Threshold', fontsize=14)
-    ax.set_xlabel('Pseudo Message ID\n(Index in MSE List)')
-    ax.set_ylabel('Mean Squared Error\n(Log Scale)')
-
-    # orange legend for threshold value
-    ax.legend(loc='lower left', prop={'size': 9})
-
-    # display
-    fig.show()
-    plt.show()
-
+    # # adjust this parameter to customise the recall/precision trade-off
+    # Z_SCORE_THRESHOLD = 3
+    #
+    # # find the outliers on our reconstructions' mean squared errors
+    # mad_z_scores, threshold_value = vae.detect_mad_outliers(mse, threshold=Z_SCORE_THRESHOLD)
+    # mad_outliers = (mad_z_scores > Z_SCORE_THRESHOLD).astype(int)
+    # print("mad outliers of our reconstructions' MSE: ", mad_outliers)
+    #
+    # anomalies = len(mad_outliers[mad_outliers == True])
+    # total_trades = len(test_y)
+    # d = (anomalies / total_trades * 100)
+    #
+    # print("MAD Z-score > ", Z_SCORE_THRESHOLD, " is the selected threshold.")
+    # print("Any trade with a MSRE >= ", threshold_value, " is flagged.")
+    # print("This results in", anomalies, "detected anomalies, or ", d, "% out of ", total_trades, "trades reported")
+    #
+    # data = np.column_stack((range(len(mse)), mse))
+    # print("data =", type(data), data)
+    # # scatter's x & y
+    # clean_x, clean_y = data[test_y == 0][:, 0], data[test_y == 0][:, 1]
+    # fraud_x, fraud_y = data[test_y == 1][:, 0], data[test_y == 1][:, 1]
+    # print("clean x,y : ", clean_x, clean_y)
+    # print("fraud x,y : ", fraud_x, fraud_y)
+    #
+    # # instantiate new figure
+    # fig, ax = plt.subplots(figsize=(15, 8))
+    #
+    # # plot reconstruction errors
+    # ax.scatter(clean_x, clean_y, s=20, color='g', alpha=0.6, label='Clean')
+    # ax.scatter(fraud_x, fraud_y, s=30, color='r', alpha=1, label='Fraud')
+    #
+    # # MAD threshold line
+    # ax.plot([threshold_value for i in range(len(mse))], color='orange', linewidth=1.5,
+    #         label='MAD threshold')
+    #
+    # # change scale to log & limit x-axis range
+    # ax.set_yscale('log')
+    # ax.set_xlim(0, (len(mse) + 100))
+    #
+    # # title & labels
+    # fig.suptitle('Mean Squared Reconstruction Errors & MAD Threshold', fontsize=14)
+    # ax.set_xlabel('Pseudo Message ID\n(Index in MSE List)')
+    # ax.set_ylabel('Mean Squared Error\n(Log Scale)')
+    #
+    # # orange legend for threshold value
+    # ax.legend(loc='lower left', prop={'size': 9})
+    #
+    # # display
+    # fig.show()
+    # plt.show()
+    #
