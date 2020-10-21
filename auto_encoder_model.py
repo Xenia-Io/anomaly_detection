@@ -198,7 +198,7 @@ class Autoencoder():
 if __name__ == "__main__":
 
     # Preprocessing the dataset
-    preprocessor = Preprocessor('big_dataset.json', True, True, dnn = False)
+    preprocessor = Preprocessor('big_dataset.json', True, False, dnn = False)
     preprocessor.preprocessing()
     print("DEBUG_ AUTOENCODER AFTER PREPROCESSING: ", preprocessor.x_train.shape, preprocessor.x_test.shape)
 
@@ -238,6 +238,7 @@ if __name__ == "__main__":
     )
 
     # concatenate with fraud transactions into a single dataframe
+    print("+++++++++++ DEBUGGING clean : ", type(clean), clean.at[0, "messages"], type(clean.at[0, "messages"]))
     visualisation_initial = pd.concat([fraud, clean_undersampled])
     column_names = list(visualisation_initial.drop('labels', axis=1).columns)
 

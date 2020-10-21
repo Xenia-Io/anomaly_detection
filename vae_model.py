@@ -51,7 +51,7 @@ class Autoencoder_Model():
 
 
     def build_autoencoder(self, X, vocab_size, emdedding_size, pretrained_weights):
-        print("\n ...Start building VAE with X.shape: ...", X.shape)
+        print("\n ...Start building VAE with X.shape: ...", X.shape, " and batch size:", self.batch_size)
         batch_size = self.batch_size
         maxlen = self.maxlen
 
@@ -61,11 +61,11 @@ class Autoencoder_Model():
         print("pretrained_weights shape now : ", pretrained_weights.shape)
         x_embed = Embedding(input_dim=vocab_size, output_dim=emdedding_size, weights=[pretrained_weights],
                              trainable=False)(x)
-        print("X shape now : ", x_embed.shape)
+        print("X embed shape now : ", x_embed.shape)
         h = LSTM(self.intermediate_dim, return_sequences=False, recurrent_dropout=0.2)(x_embed)
         h = Dropout(0.2)(h)
         h = Dense(self.intermediate_dim, activation='linear')(h)
-        h = Activation('softmax')(h)
+        h = Activation('sigmoid')(h)
         h = Dropout(0.2)(h)
         z_mean = Dense(self.latent_dim)(h)
         z_log_var = Dense(self.latent_dim)(h)
@@ -82,7 +82,6 @@ class Autoencoder_Model():
         # we instantiate these layers separately so as to reuse them later
         repeated_context = RepeatVector(emdedding_size)
         decoder_h = LSTM(self.intermediate_dim, return_sequences=True, recurrent_dropout=0.2)
-        # decoder_mean = TimeDistributed(Dense(vocab_size, activation='linear'))
         decoder_mean = Dense(64, activation='linear')
         h_decoded = decoder_h(repeated_context(z))
         x_decoded_mean = decoder_mean(h_decoded)
@@ -99,35 +98,60 @@ class Autoencoder_Model():
                 self.target_weights = tf.constant(np.ones((batch_size, maxlen)), tf.float32)
 
             def vae_loss(self, x, x_decoded_mean):
-                # xent_loss = K.sum(metrics.categorical_crossentropy(x, x_decoded_mean), axis=-1)
                 labels = tf.cast(x, tf.int32)
                 xent_loss = bck.sum(tfa.seq2seq.sequence_loss(x_decoded_mean, labels,
                                                                    weights=self.target_weights,
                                                                    average_across_timesteps=False,
                                                                    average_across_batch=False), axis=-1)
 
-                kl_loss = - 0.5 * bck.sum(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var), axis=-1)
-                return bck.mean(xent_loss + kl_loss)
+                kl_loss = - 0.5 * bck.mean(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var), axis=-1)
+                # kl_loss = - 0.5 * bck.mean(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var), axis=-1)
+
+                # vae_loss = bck.mean(xent_loss + kl_loss)
+                # print("xent_loss: ", xent_loss)
+                # print("kl_loss: ", kl_loss)
+                vae_loss = tf.keras.backend.mean(xent_loss + kl_loss)
+                # print("xxx_0 loss: ", vae_loss)
+                return vae_loss
 
             def call(self, inputs):
                 x = inputs[0]
                 x_decoded_mean = inputs[1]
                 print(x.shape, x_decoded_mean.shape)
                 loss = self.vae_loss(x, x_decoded_mean)
+                # print("xxx_1 loss: ", loss)
                 self.add_loss(loss, inputs=inputs)
                 # we don't use this output, but it has to have the correct shape:
                 return bck.ones_like(x)
 
         loss_layer = CustomVariationalLayer()([x, x_decoded_mean])
+
         # def vae_loss(x, x_decoded_mean):
-        #     xent_loss = tf_losses.MSE(x, x_decoded_mean)
-        #     kl_loss = - 0.5 * bck.mean(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var))
-        #     loss = xent_loss + kl_loss
-        #     return loss
+        #     # Reconstruction loss
+        #     encode_decode_loss = x * bck.log(1e-10 + x_decoded_mean) \
+        #                          + (1 - x) * bck.log(1e-10 + 1 - x_decoded_mean)
+        #     encode_decode_loss = -tf.reduce_sum(encode_decode_loss, 1)
+        #     # KL Divergence loss
+        #     kl_div_loss = 1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var)
+        #     kl_div_loss = -0.5 * tf.reduce_sum(kl_div_loss, 1)
+        #     return tf.reduce_mean(encode_decode_loss + kl_div_loss)
+        #     # xent_loss = tf_losses.MeanSquaredError(x, x_decoded_mean)
+        #     # print("z_log_var = ", z_log_var,  " z_mean: ", z_mean)
+        #     # kl_loss = - 0.5 * bck.sum(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var), axis=-1)
+        #     # loss = xent_loss + kl_loss
+        #     # print("vae_loss: ", loss, " - xent_loss: ", xent_loss, " - kl_loss: ", kl_loss)
+        #     # return loss
 
         # end-to-end autoencoder
         vae = Model(x, [loss_layer])
         # vae = Model(x, x_decoded_mean)
+
+        # vae.compile(optimizer='adam', loss=[zero_loss])
+        vae.compile(optimizer='adam', loss= zero_loss)
+        vae.summary()
+
+        dot_img_file = 'model_2.png'
+        tf.keras.utils.plot_model(vae, to_file=dot_img_file, show_shapes=True)
 
         # encoder, from inputs to latent space
         encoder = Model(x, z_mean)
@@ -136,11 +160,8 @@ class Autoencoder_Model():
         decoder_input = Input(shape=(self.latent_dim,))
         _h_decoded = decoder_h(repeated_context(decoder_input))
         _x_decoded_mean = decoder_mean(_h_decoded)
-        _x_decoded_mean = Activation('softmax')(_x_decoded_mean)
+        _x_decoded_mean = Activation('sigmoid')(_x_decoded_mean)
         decoder = Model(decoder_input, _x_decoded_mean)
-
-        vae.compile(optimizer='adam', loss=[zero_loss])
-        # vae.compile(optimizer='adam', loss=vae_loss)
 
         return vae, encoder, decoder
 
@@ -504,7 +525,7 @@ if __name__ == "__main__":
 
     # Compile model
     vae, encoder, decoder = autoencoder.build_autoencoder(train_x, vocab_size, emdedding_size, pretrained_weights)
-    vae.summary()
+    # vae.summary()
     print("test_x.shape: ", test_x.shape)
 
     # Visualization
@@ -524,8 +545,7 @@ if __name__ == "__main__":
     # autoencoder.pca_scatter(data_subset, labels)
     # autoencoder.umap_scatter(data_subset, labels)
 
-    dot_img_file = 'model_2.png'
-    tf.keras.utils.plot_model(vae, to_file=dot_img_file, show_shapes=True)
+
 
     # Train the model
     # history = vae.fit(
@@ -534,6 +554,7 @@ if __name__ == "__main__":
     #     batch_size=autoencoder.batch_size,
     #     shuffle=True, validation_split=0.3
     # ).history
+
     history = vae.fit(
         train_x, train_y,
         epochs=autoencoder.epochs,
@@ -552,7 +573,7 @@ if __name__ == "__main__":
 
     # Test the mode
     reconstructions = vae.predict(train_x)
-    print("HERE..............  ::: ", reconstructions.shape, test_x.shape)
+    print("reconstructions and train_x shapes : ", reconstructions.shape, train_x.shape)
     # calculating the mean squared error reconstruction loss per row in the numpy array
     mse = np.mean(np.power(train_x - reconstructions, 2), axis=1)
 
