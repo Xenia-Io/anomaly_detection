@@ -1,5 +1,6 @@
 import string
 import random
+import sys
 from time import time
 import multiprocessing
 from pre_processor import Preprocessor
@@ -14,6 +15,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import gensim
+import keras
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tensorflow.keras.losses as tf_losses
@@ -21,13 +23,13 @@ import tensorflow.keras.backend as bck
 from tensorflow.keras import layers, regularizers
 from tensorflow.python.keras.layers import RepeatVector, TimeDistributed, Layer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
-from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Lambda
+from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Lambda, GRU, ELU
 from tensorflow.keras.models import Model, Sequential
 
 
 class Autoencoder_Model():
 
-    def __init__(self, epsilon_std=1, timesteps = 1, epochs= 2, latent_dim = 32, intermediate_dim = 96, \
+    def __init__(self, epsilon_std=1, timesteps = 1, epochs= 1, latent_dim = 32, intermediate_dim = 96, \
                  optimizer='adam', loss='mae', batch_size=1, kernel_init=0, gamma=0, epsilon=0, \
                  w_decay=0, momentum=0, dropout=0, embed_size = 300, max_features = 10000, maxlen = 64):
         self.optimizer = optimizer
@@ -51,24 +53,25 @@ class Autoencoder_Model():
 
 
     def build_autoencoder(self, X, vocab_size, emdedding_size, pretrained_weights):
-        print("\n ...Start building VAE with X.shape: ...", X.shape, " and batch size:", self.batch_size)
-        batch_size = self.batch_size
-        maxlen = self.maxlen
 
-        # x = Input(batch_shape=(None, emdedding_size))
-        x = Input(batch_shape=(self.timesteps, emdedding_size,))
-        print("X shape now : ", x.shape)
-        print("pretrained_weights shape now : ", pretrained_weights.shape)
+        # sess = tf.compat.v1.InteractiveSession()
+        print("\n ...Start building VAE with X.shape: ...", X.shape, " and batch size:", self.batch_size)
+
+        x = Input(batch_shape=(None, emdedding_size))
+        # x = Input(batch_shape=(self.timesteps, emdedding_size,))
+        # print("X shape now : ", x.shape) --> (None, 64)
+        # print("pretrained_weights shape now : ", pretrained_weights.shape) --> (55, 64)
         x_embed = Embedding(input_dim=vocab_size, output_dim=emdedding_size, weights=[pretrained_weights],
                              trainable=False)(x)
-        print("X embed shape now : ", x_embed.shape)
+        print("x_embed: ", x_embed)
+        # print("X embed shape now : ", x_embed.shape) -->  (None, 64, 64)
+
         h = LSTM(self.intermediate_dim, return_sequences=False, recurrent_dropout=0.2)(x_embed)
-        h = Dropout(0.2)(h)
-        h = Dense(self.intermediate_dim, activation='linear')(h)
-        h = Activation('sigmoid')(h)
-        h = Dropout(0.2)(h)
-        z_mean = Dense(self.latent_dim)(h)
-        z_log_var = Dense(self.latent_dim)(h)
+
+
+        z_mean = Dense(self.latent_dim, name="z_mean")(h)
+        z_log_var = Dense(self.latent_dim, name="z_log_var")(h)
+
 
         def sampling(args):
             z_mean, z_log_var = args
@@ -77,93 +80,75 @@ class Autoencoder_Model():
             return z_mean + bck.exp(z_log_var / 2) * epsilon
 
         # note that "output_shape" isn't necessary with the TensorFlow backend
-        z = Lambda(sampling)([z_mean, z_log_var])
+        z = Lambda(sampling, name="sampling")([z_mean, z_log_var])
 
+        encoder = Model(x, [z_mean, z_log_var, z], name="encoder")
+        encoder.summary()
+
+        # build a generator that can sample sentences from the learned distribution
         # we instantiate these layers separately so as to reuse them later
         repeated_context = RepeatVector(emdedding_size)
         decoder_h = LSTM(self.intermediate_dim, return_sequences=True, recurrent_dropout=0.2)
-        decoder_mean = Dense(64, activation='linear')
+        decoder_mean = TimeDistributed(Dense(emdedding_size, activation='linear'))  # softmax is applied in the seq2seqloss by tf
         h_decoded = decoder_h(repeated_context(z))
         x_decoded_mean = decoder_mean(h_decoded)
 
-        # placeholder loss
-        def zero_loss(y_true, y_pred):
-            return bck.zeros_like(y_pred)
-
-        # Custom VAE loss layer
-        class CustomVariationalLayer(Layer):
-            def __init__(self, **kwargs):
-                self.is_placeholder = True
-                super(CustomVariationalLayer, self).__init__(**kwargs)
-                self.target_weights = tf.constant(np.ones((batch_size, maxlen)), tf.float32)
-
-            def vae_loss(self, x, x_decoded_mean):
-                labels = tf.cast(x, tf.int32)
-                xent_loss = bck.sum(tfa.seq2seq.sequence_loss(x_decoded_mean, labels,
-                                                                   weights=self.target_weights,
-                                                                   average_across_timesteps=False,
-                                                                   average_across_batch=False), axis=-1)
-
-                kl_loss = - 0.5 * bck.mean(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var), axis=-1)
-                # kl_loss = - 0.5 * bck.mean(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var), axis=-1)
-
-                # vae_loss = bck.mean(xent_loss + kl_loss)
-                # print("xent_loss: ", xent_loss)
-                # print("kl_loss: ", kl_loss)
-                vae_loss = tf.keras.backend.mean(xent_loss + kl_loss)
-                # print("xxx_0 loss: ", vae_loss)
-                return vae_loss
-
-            def call(self, inputs):
-                x = inputs[0]
-                x_decoded_mean = inputs[1]
-                print(x.shape, x_decoded_mean.shape)
-                loss = self.vae_loss(x, x_decoded_mean)
-                # print("xxx_1 loss: ", loss)
-                self.add_loss(loss, inputs=inputs)
-                # we don't use this output, but it has to have the correct shape:
-                return bck.ones_like(x)
-
-        loss_layer = CustomVariationalLayer()([x, x_decoded_mean])
-
-        # def vae_loss(x, x_decoded_mean):
-        #     # Reconstruction loss
-        #     encode_decode_loss = x * bck.log(1e-10 + x_decoded_mean) \
-        #                          + (1 - x) * bck.log(1e-10 + 1 - x_decoded_mean)
-        #     encode_decode_loss = -tf.reduce_sum(encode_decode_loss, 1)
-        #     # KL Divergence loss
-        #     kl_div_loss = 1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var)
-        #     kl_div_loss = -0.5 * tf.reduce_sum(kl_div_loss, 1)
-        #     return tf.reduce_mean(encode_decode_loss + kl_div_loss)
-        #     # xent_loss = tf_losses.MeanSquaredError(x, x_decoded_mean)
-        #     # print("z_log_var = ", z_log_var,  " z_mean: ", z_mean)
-        #     # kl_loss = - 0.5 * bck.sum(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var), axis=-1)
-        #     # loss = xent_loss + kl_loss
-        #     # print("vae_loss: ", loss, " - xent_loss: ", xent_loss, " - kl_loss: ", kl_loss)
-        #     # return loss
-
-        # end-to-end autoencoder
-        vae = Model(x, [loss_layer])
-        # vae = Model(x, x_decoded_mean)
-
-        # vae.compile(optimizer='adam', loss=[zero_loss])
-        vae.compile(optimizer='adam', loss= zero_loss)
-        vae.summary()
-
-        dot_img_file = 'model_2.png'
-        tf.keras.utils.plot_model(vae, to_file=dot_img_file, show_shapes=True)
-
-        # encoder, from inputs to latent space
-        encoder = Model(x, z_mean)
-
-        # decoder
         decoder_input = Input(shape=(self.latent_dim,))
         _h_decoded = decoder_h(repeated_context(decoder_input))
         _x_decoded_mean = decoder_mean(_h_decoded)
-        _x_decoded_mean = Activation('sigmoid')(_x_decoded_mean)
-        decoder = Model(decoder_input, _x_decoded_mean)
+        _x_decoded_mean = Activation('relu', name="relu")(_x_decoded_mean)
+        decoder = Model(decoder_input, _x_decoded_mean, name="decoder")
+        # latent_inputs = Input(shape=(self.latent_dim,))
+        # decoder_outputs = GRU(self.intermediate_dim, return_sequences=False, recurrent_dropout=0.2)(latent_inputs)
+        # decoder = Model(latent_inputs, decoder_outputs, name="decoder")
+        decoder.summary()
 
-        return vae, encoder, decoder
+        def vae_loss(x, x_decoded_onehot):
+            xent_loss = bck.categorical_crossentropy(x, x_decoded_onehot)
+            kl_loss = - 0.5 * bck.mean(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var))
+            loss = xent_loss + kl_loss
+            return loss
+
+        class VAE(tf.keras.Model):
+            def __init__(self, encoder, decoder, **kwargs):
+                super(VAE, self).__init__(**kwargs)
+                self.encoder = encoder
+                self.decoder = decoder
+
+            def train_step(self, data):
+                if isinstance(data, tuple):
+                    data = data[0]
+                with tf.GradientTape() as tape:
+                    z_mean, z_log_var, z = encoder(data)
+                    reconstruction = decoder(z)
+                    reconstruction_loss = tf.reduce_mean(
+                        tf_losses.binary_crossentropy(data, reconstruction)
+                    )
+                    # reconstruction_loss *= 28 * 28
+                    kl_loss = 1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var)
+                    kl_loss = tf.reduce_mean(kl_loss)
+                    kl_loss *= -0.5
+                    total_loss = reconstruction_loss + kl_loss
+                grads = tape.gradient(total_loss, self.trainable_weights)
+                self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+                return {
+                    "loss": total_loss,
+                    "reconstruction_loss": reconstruction_loss,
+                    "kl_loss": kl_loss,
+                }
+
+        vae = VAE(encoder, decoder)
+        vae.compile(optimizer='adam')
+        # vae.compile(optimizer='adam', loss= vae_loss)
+        #
+        # vae.summary()
+
+        # dot_img_file = 'model_2.png'
+        # tf.keras.utils.plot_model(vae, to_file=dot_img_file, show_shapes=True)
+
+
+
+        return encoder, decoder, vae
 
 
     def detect_mad_outliers(self, points, threshold=3.5):
@@ -339,6 +324,8 @@ class SequenceIterator:
 
     def word2idx(self, word_model, word):
         try:
+            # print("WORD = ", word)
+            # print("WORD2 IDX:", word_model.wv.vocab[word].index)
             return word_model.wv.vocab[word].index
             # If word is not in index return 0. I realize this means that this
             # is the same as the word of index 0 (i.e. most frequent word), but 0s
@@ -368,6 +355,8 @@ class SequenceIterator:
 if __name__ == "__main__":
     tf.config.experimental_run_functions_eagerly(True)
     print(tf.__version__)
+    # tf.compat.v1.InteractiveSession()
+
     #
     # print("Is there a GPU available: "),
     # print(tf.test.is_gpu_available())
@@ -471,6 +460,8 @@ if __name__ == "__main__":
     set_x = []
     set_y = []
     for w, c in sequences_train:
+        # print("w = ", w)
+        # print("c = ", c)
         set_x.append(w)
         set_y.append(cat_dict[c])
 
@@ -497,9 +488,9 @@ if __name__ == "__main__":
 
     total_samples = df_copy_train.shape[0]
     total_samples_test = df_copy_test.shape[0]
-    # n_val = int(VALID_PER * total_samples)
-    # n_train = total_samples - n_val
-    n_train = total_samples
+    n_val = int(VALID_PER * total_samples)
+    n_train = total_samples - n_val
+    # n_train = total_samples
     n_test = df_copy_test.shape[0]
 
     random_i = random.sample(range(total_samples), total_samples)
@@ -507,26 +498,26 @@ if __name__ == "__main__":
     print("df_copy_train.shape: ", df_copy_train.shape)
     train_x = set_x[random_i[:n_train]]
     train_y = set_y[random_i[:n_train]]
-    # val_x = set_x[random_i[n_train:n_train + n_val]]
-    # val_y = set_y[random_i[n_train:n_train + n_val]]
+    val_x = set_x[random_i[n_train:n_train + n_val]]
+    val_y = set_y[random_i[n_train:n_train + n_val]]
     test_x = set_x_test[random_j[:n_test]]
     test_y = set_y_test[random_j[:n_test]]
 
 
     print("Train Shapes - X: {} - Y: {}".format(train_x.shape, train_y.shape))
-    # print("Val Shapes - X: {} - Y: {}".format(val_x.shape, val_y.shape))
+    print("Val Shapes - X: {} - Y: {}".format(val_x.shape, val_y.shape))
     print("Test Shapes - X: {} - Y: {}".format(test_x.shape, test_y.shape))
-    print(df_copy_test[df_copy_test.labels == 1])
+    # print(df_copy_test[df_copy_test.labels == 1])
 
     print("train_x shape: ", train_x.shape)
     # train_x = train_x.reshape(train_x.shape[0], 1, train_x.shape[1])
     # test_x = test_x.reshape(test_x.shape[0], 1, test_x.shape[1])
     print("train_x shape: ", train_x.shape)
-
+    print("sample 0 ", len(train_x[0]))
     # Compile model
-    vae, encoder, decoder = autoencoder.build_autoencoder(train_x, vocab_size, emdedding_size, pretrained_weights)
+    encoder, decoder, vae = autoencoder.build_autoencoder(train_x, vocab_size, emdedding_size, pretrained_weights)
     # vae.summary()
-    print("test_x.shape: ", test_x.shape)
+    # print("test_x.shape: ", test_x.shape) ---> test_x.shape:  (3006, 55)
 
     # Visualization
     visualisation_initial = np.concatenate([set_x, set_x_test_2])
@@ -535,7 +526,7 @@ if __name__ == "__main__":
 
     visual_df = pd.DataFrame(visual_dict, columns=['messages', 'labels'])
     print("Debug : ", visualisation_initial.shape, visual_initial_y.shape)
-    print(visual_df)
+    # print(visual_df) ----> [10006 rows x 2 columns (messages and lables) ]
 
     # isolate features from labels
     features, labels = visual_df.drop('labels', axis=1).values, visual_df.labels.values
@@ -548,18 +539,11 @@ if __name__ == "__main__":
 
 
     # Train the model
-    # history = vae.fit(
-    #     [train_x, train_x],
-    #     epochs=autoencoder.epochs,
-    #     batch_size=autoencoder.batch_size,
-    #     shuffle=True, validation_split=0.3
-    # ).history
-
     history = vae.fit(
-        train_x, train_y,
+        train_x, train_x,
         epochs=autoencoder.epochs,
         batch_size=autoencoder.batch_size,
-        shuffle=True, validation_split=0.3
+        shuffle=True, validation_data=(val_x, val_x)
     ).history
 
     # Plot the training and validation loss
@@ -570,18 +554,18 @@ if __name__ == "__main__":
     ax.set_ylabel("Loss")
     ax.legend(loc='upper right')
     plt.show()
-
-    # Test the mode
-    reconstructions = vae.predict(train_x)
-    print("reconstructions and train_x shapes : ", reconstructions.shape, train_x.shape)
-    # calculating the mean squared error reconstruction loss per row in the numpy array
-    mse = np.mean(np.power(train_x - reconstructions, 2), axis=1)
-
-    # showing the reconstruction losses for a subsample of transactions
-    print(f'Mean Squared Error reconstruction losses for {5} clean transactions:')
-    print(mse[np.where(train_y == 0)][:5])
-    print(f'\nMean Squared Error reconstruction losses for {5} fraudulent transactions:')
-    print(mse[np.where(train_y == 1)][:5])
+    #
+    # # Test the mode
+    # reconstructions = vae.predict(train_x)
+    # print("reconstructions and train_x shapes : ", reconstructions.shape, train_x.shape)
+    # # calculating the mean squared error reconstruction loss per row in the numpy array
+    # mse = np.mean(np.power(train_x - reconstructions, 2), axis=1)
+    #
+    # # showing the reconstruction losses for a subsample of transactions
+    # print(f'Mean Squared Error reconstruction losses for {5} clean transactions:')
+    # print(mse[np.where(train_y == 0)][:5])
+    # print(f'\nMean Squared Error reconstruction losses for {5} fraudulent transactions:')
+    # print(mse[np.where(train_y == 1)][:5])
 
     # # adjust this parameter to customise the recall/precision trade-off
     # Z_SCORE_THRESHOLD = 3
