@@ -27,6 +27,62 @@ from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Acti
 from tensorflow.keras.models import Model, Sequential
 
 
+class Sampling(layers.Layer):
+    def call(self, inputs):
+        z_mean, z_log_var = inputs
+        batch = tf.shape(z_mean)[0]
+        dim = tf.shape(z_mean)[1]
+        epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
+        return z_mean + tf.exp(0.5 * z_log_var) * epsilon
+
+class VAE(tf.keras.Model):
+    def __init__(self, encoder, decoder, **kwargs):
+        super(VAE, self).__init__(**kwargs)
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def train_step(self, data):
+        if isinstance(data, tuple):
+            data = data[0]
+        with tf.GradientTape() as tape:
+            z_mean, z_log_var, z = encoder(data)
+            reconstruction = decoder(z)
+            reconstruction_loss = tf.reduce_mean(
+                tf_losses.binary_crossentropy(data, reconstruction)
+            )
+            # reconstruction_loss *= 28 * 28
+            kl_loss = 1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var)
+            kl_loss = tf.reduce_mean(kl_loss)
+            kl_loss *= -0.5
+            total_loss = reconstruction_loss + kl_loss
+        grads = tape.gradient(total_loss, self.trainable_weights)
+        self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+        return {
+            "loss": total_loss,
+            "reconstruction_loss": reconstruction_loss,
+            "kl_loss": kl_loss,
+        }
+
+    def test_step(self, data):
+        if isinstance(data, tuple):
+            data = data[0]
+
+        z_mean, z_log_var, z = encoder(data)
+        reconstruction = decoder(z)
+        reconstruction_loss = tf.reduce_mean(
+            keras.losses.binary_crossentropy(data, reconstruction)
+        )
+        # reconstruction_loss *= 28 * 28
+        kl_loss = 1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var)
+        kl_loss = tf.reduce_mean(kl_loss)
+        kl_loss *= -0.5
+        total_loss = reconstruction_loss + kl_loss
+        return {
+            "loss": total_loss,
+            "reconstruction_loss": reconstruction_loss,
+            "kl_loss": kl_loss,
+        }
+
 class Autoencoder_Model():
 
     def __init__(self, epsilon_std=1, timesteps = 1, epochs= 1, latent_dim = 32, intermediate_dim = 96, \
@@ -50,105 +106,8 @@ class Autoencoder_Model():
         self.intermediate_dim = intermediate_dim # output shape of LSTM
         self.latent_dim = latent_dim # latent z-layer shape
         self.epsilon_std = epsilon_std # z-layer sigma
+        self.emdedding_size = 200 # z-layer sigma
 
-
-    def build_autoencoder(self, X, vocab_size, emdedding_size, pretrained_weights):
-
-        # sess = tf.compat.v1.InteractiveSession()
-        print("\n ...Start building VAE with X.shape: ...", X.shape, " and batch size:", self.batch_size)
-
-        x = Input(batch_shape=(None, emdedding_size))
-        # x = Input(batch_shape=(self.timesteps, emdedding_size,))
-        # print("X shape now : ", x.shape) --> (None, 64)
-        # print("pretrained_weights shape now : ", pretrained_weights.shape) --> (55, 64)
-        x_embed = Embedding(input_dim=vocab_size, output_dim=emdedding_size, weights=[pretrained_weights],
-                             trainable=False)(x)
-        print("x_embed: ", x_embed)
-        # print("X embed shape now : ", x_embed.shape) -->  (None, 64, 64)
-
-        h = LSTM(self.intermediate_dim, return_sequences=False, recurrent_dropout=0.2)(x_embed)
-
-
-        z_mean = Dense(self.latent_dim, name="z_mean")(h)
-        z_log_var = Dense(self.latent_dim, name="z_log_var")(h)
-
-
-        def sampling(args):
-            z_mean, z_log_var = args
-            epsilon = bck.random_normal(shape=(self.batch_size, self.latent_dim), mean=0.,
-                                      stddev=self.epsilon_std)
-            return z_mean + bck.exp(z_log_var / 2) * epsilon
-
-        # note that "output_shape" isn't necessary with the TensorFlow backend
-        z = Lambda(sampling, name="sampling")([z_mean, z_log_var])
-
-        encoder = Model(x, [z_mean, z_log_var, z], name="encoder")
-        encoder.summary()
-
-        # build a generator that can sample sentences from the learned distribution
-        # we instantiate these layers separately so as to reuse them later
-        repeated_context = RepeatVector(emdedding_size)
-        decoder_h = LSTM(self.intermediate_dim, return_sequences=True, recurrent_dropout=0.2)
-        decoder_mean = TimeDistributed(Dense(emdedding_size, activation='linear'))  # softmax is applied in the seq2seqloss by tf
-        h_decoded = decoder_h(repeated_context(z))
-        x_decoded_mean = decoder_mean(h_decoded)
-
-        decoder_input = Input(shape=(self.latent_dim,))
-        _h_decoded = decoder_h(repeated_context(decoder_input))
-        _x_decoded_mean = decoder_mean(_h_decoded)
-        _x_decoded_mean = Activation('relu', name="relu")(_x_decoded_mean)
-        decoder = Model(decoder_input, _x_decoded_mean, name="decoder")
-        # latent_inputs = Input(shape=(self.latent_dim,))
-        # decoder_outputs = GRU(self.intermediate_dim, return_sequences=False, recurrent_dropout=0.2)(latent_inputs)
-        # decoder = Model(latent_inputs, decoder_outputs, name="decoder")
-        decoder.summary()
-
-        def vae_loss(x, x_decoded_onehot):
-            xent_loss = bck.categorical_crossentropy(x, x_decoded_onehot)
-            kl_loss = - 0.5 * bck.mean(1 + z_log_var - bck.square(z_mean) - bck.exp(z_log_var))
-            loss = xent_loss + kl_loss
-            return loss
-
-        class VAE(tf.keras.Model):
-            def __init__(self, encoder, decoder, **kwargs):
-                super(VAE, self).__init__(**kwargs)
-                self.encoder = encoder
-                self.decoder = decoder
-
-            def train_step(self, data):
-                if isinstance(data, tuple):
-                    data = data[0]
-                with tf.GradientTape() as tape:
-                    z_mean, z_log_var, z = encoder(data)
-                    reconstruction = decoder(z)
-                    reconstruction_loss = tf.reduce_mean(
-                        tf_losses.binary_crossentropy(data, reconstruction)
-                    )
-                    # reconstruction_loss *= 28 * 28
-                    kl_loss = 1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var)
-                    kl_loss = tf.reduce_mean(kl_loss)
-                    kl_loss *= -0.5
-                    total_loss = reconstruction_loss + kl_loss
-                grads = tape.gradient(total_loss, self.trainable_weights)
-                self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
-                return {
-                    "loss": total_loss,
-                    "reconstruction_loss": reconstruction_loss,
-                    "kl_loss": kl_loss,
-                }
-
-        vae = VAE(encoder, decoder)
-        vae.compile(optimizer='adam')
-        # vae.compile(optimizer='adam', loss= vae_loss)
-        #
-        # vae.summary()
-
-        # dot_img_file = 'model_2.png'
-        # tf.keras.utils.plot_model(vae, to_file=dot_img_file, show_shapes=True)
-
-
-
-        return encoder, decoder, vae
 
 
     def detect_mad_outliers(self, points, threshold=3.5):
@@ -514,8 +473,51 @@ if __name__ == "__main__":
     # test_x = test_x.reshape(test_x.shape[0], 1, test_x.shape[1])
     print("train_x shape: ", train_x.shape)
     print("sample 0 ", len(train_x[0]))
+
     # Compile model
-    encoder, decoder, vae = autoencoder.build_autoencoder(train_x, vocab_size, emdedding_size, pretrained_weights)
+    # encoder, decoder = autoencoder.build_autoencoder(train_x, vocab_size, emdedding_size, pretrained_weights)
+    x = Input(batch_shape=(None, emdedding_size))
+    # x = Input(batch_shape=(self.timesteps, emdedding_size,))
+    # print("X shape now : ", x.shape) --> (None, 64)
+    # print("pretrained_weights shape now : ", pretrained_weights.shape) --> (55, 64)
+    x_embed = Embedding(input_dim=vocab_size, output_dim=emdedding_size, weights=[pretrained_weights],
+                        trainable=False)(x)
+    print("x_embed: ", x_embed)
+    # print("X embed shape now : ", x_embed.shape) -->  (None, 64, 64)
+
+    h = LSTM(autoencoder.intermediate_dim, return_sequences=False, recurrent_dropout=0.2)(x_embed)
+
+    z_mean = Dense(autoencoder.latent_dim, name="z_mean")(h)
+    z_log_var = Dense(autoencoder.latent_dim, name="z_log_var")(h)
+
+    # note that "output_shape" isn't necessary with the TensorFlow backend
+    z = Sampling()([z_mean, z_log_var])
+    # z = Lambda(sampling, name="sampling")([z_mean, z_log_var])
+
+    encoder = Model(x, [z_mean, z_log_var, z], name="encoder")
+    encoder.summary()
+
+    # build a generator that can sample sentences from the learned distribution
+    # we instantiate these layers separately so as to reuse them later
+    repeated_context = RepeatVector(emdedding_size)
+    decoder_h = LSTM(autoencoder.intermediate_dim, return_sequences=True, recurrent_dropout=0.2)
+    decoder_mean = TimeDistributed(
+        Dense(emdedding_size, activation='linear'))  # softmax is applied in the seq2seqloss by tf
+    h_decoded = decoder_h(repeated_context(z))
+    x_decoded_mean = decoder_mean(h_decoded)
+
+    decoder_input = Input(shape=(autoencoder.latent_dim,))
+    _h_decoded = decoder_h(repeated_context(decoder_input))
+    _x_decoded_mean = decoder_mean(_h_decoded)
+    _x_decoded_mean = Activation('relu', name="relu")(_x_decoded_mean)
+    decoder = Model(decoder_input, _x_decoded_mean, name="decoder")
+    # latent_inputs = Input(shape=(self.latent_dim,))
+    # decoder_outputs = GRU(self.intermediate_dim, return_sequences=False, recurrent_dropout=0.2)(latent_inputs)
+    # decoder = Model(latent_inputs, decoder_outputs, name="decoder")
+    decoder.summary()
+
+    vae = VAE(encoder, decoder)
+    vae.compile(optimizer='adam')
     # vae.summary()
     # print("test_x.shape: ", test_x.shape) ---> test_x.shape:  (3006, 55)
 
@@ -541,20 +543,36 @@ if __name__ == "__main__":
     # Train the model
     history = vae.fit(
         train_x, train_x,
-        epochs=autoencoder.epochs,
-        batch_size=autoencoder.batch_size,
-        shuffle=True, validation_data=(val_x, val_x)
+        epochs=3,
+        batch_size=1,
+        validation_data=(val_x, val_x),
+        shuffle=True
     ).history
 
     # Plot the training and validation loss
     fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
-    ax.plot(history['loss'], 'b', label='Train', linewidth=2)
-    ax.plot(history['val_loss'], 'r', label='Validation', linewidth=2)
+    ax.plot(history['loss'], 'b', label='loss', linewidth=2)
+    ax.plot(history['kl_loss'], 'r', label='kl_loss', linewidth=2)
+    ax.plot(history['reconstruction_loss'], 'r', label=' reconstruction loss', linewidth=2)
     ax.set_xlabel('Epoch')
     ax.set_ylabel("Loss")
     ax.legend(loc='upper right')
     plt.show()
-    #
+
+
+
+    def plot_label_clusters(encoder, decoder, data, labels):
+        # display a 2D plot of the digit classes in the latent space
+        z_mean, _, _ = encoder.predict(data)
+        plt.figure(figsize=(12, 10))
+        plt.scatter(z_mean[:, 0], z_mean[:, 1], c=labels)
+        plt.colorbar()
+        plt.xlabel("z[0]")
+        plt.ylabel("z[1]")
+        plt.show()
+
+
+    plot_label_clusters(encoder, decoder, train_x, train_y)
     # # Test the mode
     # reconstructions = vae.predict(train_x)
     # print("reconstructions and train_x shapes : ", reconstructions.shape, train_x.shape)
