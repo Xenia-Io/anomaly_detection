@@ -25,6 +25,9 @@ from tensorflow.python.keras.layers import RepeatVector, TimeDistributed, Layer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Lambda, GRU, ELU
 from tensorflow.keras.models import Model, Sequential
+import tensorflow_probability as tfp
+
+tfd = tfp.distributions
 
 
 class Sampling(layers.Layer):
@@ -46,11 +49,11 @@ class VAE(tf.keras.Model):
             data = data[0]
         with tf.GradientTape() as tape:
             z_mean, z_log_var, z = encoder(data)
-            reconstruction = decoder(z)
-            reconstruction_loss = tf.reduce_mean(
-                tf_losses.binary_crossentropy(data, reconstruction)
-            )
-            # reconstruction_loss *= 28 * 28
+            reconstruction_mean = decoder(z)
+            likelihood = tfd.Normal(loc=reconstruction_mean, scale=1.0)
+            neg_log_likelihood = -1.0 * likelihood.log_prob(tf.cast(data, tf.float32))
+            reconstruction_loss = tf.reduce_mean(neg_log_likelihood)
+
             kl_loss = 1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var)
             kl_loss = tf.reduce_mean(kl_loss)
             kl_loss *= -0.5
@@ -69,10 +72,10 @@ class VAE(tf.keras.Model):
 
         z_mean, z_log_var, z = encoder(data)
         reconstruction = decoder(z)
-        reconstruction_loss = tf.reduce_mean(
-            keras.losses.binary_crossentropy(data, reconstruction)
-        )
-        # reconstruction_loss *= 28 * 28
+        likelihood = tfd.Normal(loc=reconstruction, scale=1.0)
+        neg_log_likelihood = -1.0 * likelihood.log_prob(tf.cast(data, tf.float32))
+        reconstruction_loss = tf.reduce_mean(neg_log_likelihood)
+
         kl_loss = 1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var)
         kl_loss = tf.reduce_mean(kl_loss)
         kl_loss *= -0.5
@@ -433,8 +436,8 @@ if __name__ == "__main__":
     # Padding sequences with 0.
     set_x = pad_sequences(set_x, maxlen=autoencoder.maxlen, padding='pre', value=0)
     set_y = np.array(set_y)
-    set_x_test = pad_sequences(set_x_test, maxlen=55, padding='pre', value=0)
-    set_x_test_2 = pad_sequences(set_x_test, maxlen=autoencoder.maxlen, padding='pre', value=0)
+    # set_x_test = pad_sequences(set_x_test, maxlen=55, padding='pre', value=0)
+    set_x_test = pad_sequences(set_x_test, maxlen=autoencoder.maxlen, padding='pre', value=0)
     set_y_test = np.array(set_y_test)
 
     print("set_x.shape: ", set_x.shape, type(set_x))
@@ -448,8 +451,8 @@ if __name__ == "__main__":
     total_samples = df_copy_train.shape[0]
     total_samples_test = df_copy_test.shape[0]
     n_val = int(VALID_PER * total_samples)
-    n_train = total_samples - n_val
-    # n_train = total_samples
+    # n_train = total_samples - n_val
+    n_train = 500
     n_test = df_copy_test.shape[0]
 
     random_i = random.sample(range(total_samples), total_samples)
@@ -457,8 +460,8 @@ if __name__ == "__main__":
     print("df_copy_train.shape: ", df_copy_train.shape)
     train_x = set_x[random_i[:n_train]]
     train_y = set_y[random_i[:n_train]]
-    val_x = set_x[random_i[n_train:n_train + n_val]]
-    val_y = set_y[random_i[n_train:n_train + n_val]]
+    val_x = set_x[random_i[n_train:n_train + 4]]
+    val_y = set_y[random_i[n_train:n_train + 4]]
     test_x = set_x_test[random_j[:n_test]]
     test_y = set_y_test[random_j[:n_test]]
 
@@ -501,8 +504,7 @@ if __name__ == "__main__":
     # we instantiate these layers separately so as to reuse them later
     repeated_context = RepeatVector(emdedding_size)
     decoder_h = LSTM(autoencoder.intermediate_dim, return_sequences=True, recurrent_dropout=0.2)
-    decoder_mean = TimeDistributed(
-        Dense(emdedding_size, activation='linear'))  # softmax is applied in the seq2seqloss by tf
+    decoder_mean = Dense(emdedding_size, activation='linear', name='decoder_mean')
     h_decoded = decoder_h(repeated_context(z))
     x_decoded_mean = decoder_mean(h_decoded)
 
@@ -522,7 +524,7 @@ if __name__ == "__main__":
     # print("test_x.shape: ", test_x.shape) ---> test_x.shape:  (3006, 55)
 
     # Visualization
-    visualisation_initial = np.concatenate([set_x, set_x_test_2])
+    visualisation_initial = np.concatenate([set_x, set_x_test])
     visual_initial_y = np.concatenate([set_y, set_y_test])
     visual_dict = {'messages': list(visualisation_initial), 'labels': list(visual_initial_y)}
 
@@ -543,7 +545,7 @@ if __name__ == "__main__":
     # Train the model
     history = vae.fit(
         train_x, train_x,
-        epochs=3,
+        epochs=7,
         batch_size=1,
         validation_data=(val_x, val_x),
         shuffle=True
@@ -553,7 +555,7 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
     ax.plot(history['loss'], 'b', label='loss', linewidth=2)
     ax.plot(history['kl_loss'], 'r', label='kl_loss', linewidth=2)
-    ax.plot(history['reconstruction_loss'], 'r', label=' reconstruction loss', linewidth=2)
+    ax.plot(history['reconstruction_loss'], 'r', color='green',  label=' reconstruction loss', linewidth=2)
     ax.set_xlabel('Epoch')
     ax.set_ylabel("Loss")
     ax.legend(loc='upper right')
@@ -562,7 +564,7 @@ if __name__ == "__main__":
 
 
     def plot_label_clusters(encoder, decoder, data, labels):
-        # display a 2D plot of the digit classes in the latent space
+        # display a 2D plot of the classes in the latent space
         z_mean, _, _ = encoder.predict(data)
         plt.figure(figsize=(12, 10))
         plt.scatter(z_mean[:, 0], z_mean[:, 1], c=labels)
