@@ -21,7 +21,7 @@ import tensorflow_addons as tfa
 import tensorflow.keras.losses as tf_losses
 import tensorflow.keras.backend as bck
 from tensorflow.keras import layers, regularizers
-from tensorflow.python.keras.layers import RepeatVector, TimeDistributed, Layer
+from tensorflow.python.keras.layers import RepeatVector, TimeDistributed, Layer, Reshape
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Lambda, GRU, ELU
 from tensorflow.keras.models import Model, Sequential
@@ -57,7 +57,7 @@ class VAE(tf.keras.Model):
             kl_loss = 1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var)
             kl_loss = tf.reduce_mean(kl_loss)
             kl_loss *= -0.5
-            total_loss = reconstruction_loss + kl_loss
+            total_loss = (reconstruction_loss + kl_loss)
         grads = tape.gradient(total_loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
         return {
@@ -79,7 +79,7 @@ class VAE(tf.keras.Model):
         kl_loss = 1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var)
         kl_loss = tf.reduce_mean(kl_loss)
         kl_loss *= -0.5
-        total_loss = reconstruction_loss + kl_loss
+        total_loss = (reconstruction_loss + kl_loss)
         return {
             "loss": total_loss,
             "reconstruction_loss": reconstruction_loss,
@@ -452,7 +452,7 @@ if __name__ == "__main__":
     total_samples_test = df_copy_test.shape[0]
     n_val = int(VALID_PER * total_samples)
     # n_train = total_samples - n_val
-    n_train = 500
+    n_train = 200
     n_test = df_copy_test.shape[0]
 
     random_i = random.sample(range(total_samples), total_samples)
@@ -512,14 +512,16 @@ if __name__ == "__main__":
     _h_decoded = decoder_h(repeated_context(decoder_input))
     _x_decoded_mean = decoder_mean(_h_decoded)
     _x_decoded_mean = Activation('relu', name="relu")(_x_decoded_mean)
-    decoder = Model(decoder_input, _x_decoded_mean, name="decoder")
+    _x_decoded_out = Reshape((4096,))(_x_decoded_mean)
+    _x_decoded_out = Dense(emdedding_size, activation='linear', name='decoder_out')(_x_decoded_out)
+    decoder = Model(decoder_input, _x_decoded_out, name="decoder")
     # latent_inputs = Input(shape=(self.latent_dim,))
     # decoder_outputs = GRU(self.intermediate_dim, return_sequences=False, recurrent_dropout=0.2)(latent_inputs)
     # decoder = Model(latent_inputs, decoder_outputs, name="decoder")
     decoder.summary()
 
     vae = VAE(encoder, decoder)
-    vae.compile(optimizer='adam')
+    vae.compile(optimizer='sgd')
     # vae.summary()
     # print("test_x.shape: ", test_x.shape) ---> test_x.shape:  (3006, 55)
 
@@ -546,16 +548,17 @@ if __name__ == "__main__":
     history = vae.fit(
         train_x, train_x,
         epochs=7,
-        batch_size=1,
+        batch_size=10,
         validation_data=(val_x, val_x),
         shuffle=True
     ).history
 
     # Plot the training and validation loss
     fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
-    ax.plot(history['loss'], 'b', label='loss', linewidth=2)
-    ax.plot(history['kl_loss'], 'r', label='kl_loss', linewidth=2)
-    ax.plot(history['reconstruction_loss'], 'r', color='green',  label=' reconstruction loss', linewidth=2)
+    ax.plot(history['loss'], 'b', label='train_loss', linewidth=2)
+    ax.plot(history['val_loss'], 'r', label='val_loss', linewidth=2)
+    # ax.plot(history['kl_loss'], 'r', label='kl_loss', linewidth=2)
+    # ax.plot(history['reconstruction_loss'], 'r', color='green',  label=' reconstruction loss', linewidth=2)
     ax.set_xlabel('Epoch')
     ax.set_ylabel("Loss")
     ax.legend(loc='upper right')
@@ -571,6 +574,7 @@ if __name__ == "__main__":
         plt.colorbar()
         plt.xlabel("z[0]")
         plt.ylabel("z[1]")
+        plt.title("A 2D plot of the classes in the latent space")
         plt.show()
 
 
