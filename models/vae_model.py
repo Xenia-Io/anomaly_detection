@@ -71,10 +71,10 @@ class VAE(tf.keras.Model):
                             trainable=False)(x)
         print("x_embed: ", x_embed)
 
-        h = LSTM(autoencoder.intermediate_dim, return_sequences=False, recurrent_dropout=0.2)(x_embed)
+        h = LSTM(self.intermediate_dim, return_sequences=False, recurrent_dropout=0.2)(x_embed)
 
-        z_mean = Dense(autoencoder.latent_dim, name="z_mean")(h)
-        z_log_var = Dense(autoencoder.latent_dim, name="z_log_var")(h)
+        z_mean = Dense(self.latent_dim, name="z_mean")(h)
+        z_log_var = Dense(self.latent_dim, name="z_log_var")(h)
 
         z = Sampling()([z_mean, z_log_var])
 
@@ -84,12 +84,12 @@ class VAE(tf.keras.Model):
         # build a generator that can sample sentences from the learned distribution
         # we instantiate these layers separately so as to reuse them later
         repeated_context = RepeatVector(emdedding_size)
-        decoder_h = LSTM(autoencoder.intermediate_dim, return_sequences=True, recurrent_dropout=0.2)
+        decoder_h = LSTM(self.intermediate_dim, return_sequences=True, recurrent_dropout=0.2)
         decoder_mean = Dense(emdedding_size, activation='linear', name='decoder_mean')
         h_decoded = decoder_h(repeated_context(z))
         x_decoded_mean = decoder_mean(h_decoded)
 
-        decoder_input = Input(shape=(autoencoder.latent_dim,))
+        decoder_input = Input(shape=(self.latent_dim,))
         _h_decoded = decoder_h(repeated_context(decoder_input))
         _x_decoded_mean = decoder_mean(_h_decoded)
         _x_decoded_mean = Activation('relu', name="relu")(_x_decoded_mean)
