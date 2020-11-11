@@ -112,7 +112,6 @@ class Autoencoder_Model():
         self.emdedding_size = 200 # z-layer sigma
 
 
-
     def detect_mad_outliers(self, points, threshold=3.5):
         # calculate the median of the input array
         median = np.median(points, axis=0)
@@ -452,7 +451,7 @@ if __name__ == "__main__":
     total_samples_test = df_copy_test.shape[0]
     n_val = int(VALID_PER * total_samples)
     # n_train = total_samples - n_val
-    n_train = 200
+    n_train = 300
     n_test = df_copy_test.shape[0]
 
     random_i = random.sample(range(total_samples), total_samples)
@@ -547,7 +546,7 @@ if __name__ == "__main__":
     # Train the model
     history = vae.fit(
         train_x, train_x,
-        epochs=7,
+        epochs=5,
         batch_size=10,
         validation_data=(val_x, val_x),
         shuffle=True
@@ -576,69 +575,81 @@ if __name__ == "__main__":
         plt.ylabel("z[1]")
         plt.title("A 2D plot of the classes in the latent space")
         plt.show()
+    # plot_label_clusters(encoder, decoder, train_x, train_y)
 
 
-    plot_label_clusters(encoder, decoder, train_x, train_y)
-    # # Test the mode
-    # reconstructions = vae.predict(train_x)
-    # print("reconstructions and train_x shapes : ", reconstructions.shape, train_x.shape)
-    # # calculating the mean squared error reconstruction loss per row in the numpy array
-    # mse = np.mean(np.power(train_x - reconstructions, 2), axis=1)
-    #
-    # # showing the reconstruction losses for a subsample of transactions
-    # print(f'Mean Squared Error reconstruction losses for {5} clean transactions:')
-    # print(mse[np.where(train_y == 0)][:5])
-    # print(f'\nMean Squared Error reconstruction losses for {5} fraudulent transactions:')
-    # print(mse[np.where(train_y == 1)][:5])
+    # Test the mode
+    # reconstructions = vae.predict(test_x)
+    encoded_inputs = encoder.predict(test_x)
+    reconstructions = decoder.predict(encoded_inputs)
+    print("reconstructions and train_x shapes : ", reconstructions.shape, test_x.shape)
+    # calculating the mean squared error reconstruction loss per row in the numpy array
+    mse = np.mean(np.power(test_x - reconstructions, 2), axis=1)
 
-    # # adjust this parameter to customise the recall/precision trade-off
-    # Z_SCORE_THRESHOLD = 3
-    #
-    # # find the outliers on our reconstructions' mean squared errors
-    # mad_z_scores, threshold_value = vae.detect_mad_outliers(mse, threshold=Z_SCORE_THRESHOLD)
-    # mad_outliers = (mad_z_scores > Z_SCORE_THRESHOLD).astype(int)
-    # print("mad outliers of our reconstructions' MSE: ", mad_outliers)
-    #
-    # anomalies = len(mad_outliers[mad_outliers == True])
-    # total_trades = len(test_y)
-    # d = (anomalies / total_trades * 100)
-    #
-    # print("MAD Z-score > ", Z_SCORE_THRESHOLD, " is the selected threshold.")
-    # print("Any trade with a MSRE >= ", threshold_value, " is flagged.")
-    # print("This results in", anomalies, "detected anomalies, or ", d, "% out of ", total_trades, "trades reported")
-    #
-    # data = np.column_stack((range(len(mse)), mse))
-    # print("data =", type(data), data)
-    # # scatter's x & y
-    # clean_x, clean_y = data[test_y == 0][:, 0], data[test_y == 0][:, 1]
-    # fraud_x, fraud_y = data[test_y == 1][:, 0], data[test_y == 1][:, 1]
-    # print("clean x,y : ", clean_x, clean_y)
-    # print("fraud x,y : ", fraud_x, fraud_y)
-    #
-    # # instantiate new figure
-    # fig, ax = plt.subplots(figsize=(15, 8))
-    #
-    # # plot reconstruction errors
-    # ax.scatter(clean_x, clean_y, s=20, color='g', alpha=0.6, label='Clean')
-    # ax.scatter(fraud_x, fraud_y, s=30, color='r', alpha=1, label='Fraud')
-    #
-    # # MAD threshold line
-    # ax.plot([threshold_value for i in range(len(mse))], color='orange', linewidth=1.5,
-    #         label='MAD threshold')
-    #
-    # # change scale to log & limit x-axis range
-    # ax.set_yscale('log')
-    # ax.set_xlim(0, (len(mse) + 100))
-    #
-    # # title & labels
-    # fig.suptitle('Mean Squared Reconstruction Errors & MAD Threshold', fontsize=14)
-    # ax.set_xlabel('Pseudo Message ID\n(Index in MSE List)')
-    # ax.set_ylabel('Mean Squared Error\n(Log Scale)')
-    #
-    # # orange legend for threshold value
-    # ax.legend(loc='lower left', prop={'size': 9})
-    #
-    # # display
-    # fig.show()
-    # plt.show()
-    #
+    # showing the reconstruction losses for a subsample of transactions
+    # print(f'Mean Squared Error reconstruction losses')
+    # print(mse)
+
+    sorted_index_array = np.argsort(mse)
+
+    # sorted array
+    sorted_array = mse[sorted_index_array]
+
+    # we want 3 largest value
+    rslt = sorted_array[-10:]
+
+    # show the output
+    print("{} largest value:".format(10),
+          rslt)
+
+    # adjust this parameter to customise the recall/precision trade-off
+    Z_SCORE_THRESHOLD = 40
+
+    # find the outliers on our reconstructions' mean squared errors
+    mad_z_scores, threshold_value = autoencoder.detect_mad_outliers(mse, threshold=Z_SCORE_THRESHOLD)
+    mad_outliers = (mad_z_scores > Z_SCORE_THRESHOLD).astype(int)
+    print("mad outliers of our reconstructions' MSE: ", mad_outliers)
+
+    anomalies = len(mad_outliers[mad_outliers == True])
+    total_trades = len(test_y)
+    d = (anomalies / total_trades * 100)
+
+    print("MAD Z-score > ", Z_SCORE_THRESHOLD, " is the selected threshold.")
+    print("Any trade with a MSRE >= ", threshold_value, " is flagged.")
+    print("This results in", anomalies, "detected anomalies, or ", d, "% out of ", total_trades, "trades reported")
+
+    data = np.column_stack((range(len(mse)), mse))
+    print("data =", type(data), data)
+    # scatter's x & y
+    clean_x, clean_y = data[test_y == 0][:, 0], data[test_y == 0][:, 1]
+    fraud_x, fraud_y = data[test_y == 1][:, 0], data[test_y == 1][:, 1]
+    print("clean x,y : ", clean_x, clean_y)
+    print("fraud x,y : ", fraud_x, fraud_y)
+
+    # instantiate new figure
+    fig, ax = plt.subplots(figsize=(15, 8))
+
+    # plot reconstruction errors
+    ax.scatter(clean_x, clean_y, s=20, color='g', alpha=0.6, label='Clean')
+    ax.scatter(fraud_x, fraud_y, s=30, color='r', alpha=1, label='Fraud')
+
+    # MAD threshold line
+    ax.plot([threshold_value for i in range(len(mse))], color='orange', linewidth=1.5,
+            label='MAD threshold')
+
+    # change scale to log & limit x-axis range
+    ax.set_yscale('log')
+    ax.set_xlim(0, (len(mse) + 100))
+
+    # title & labels
+    fig.suptitle('Mean Squared Reconstruction Errors & MAD Threshold', fontsize=14)
+    ax.set_xlabel('Pseudo Message ID\n(Index in MSE List)')
+    ax.set_ylabel('Mean Squared Error\n(Log Scale)')
+
+    # orange legend for threshold value
+    ax.legend(loc='lower left', prop={'size': 9})
+
+    # display
+    fig.show()
+    plt.show()
+
