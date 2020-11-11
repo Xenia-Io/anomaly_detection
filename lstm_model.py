@@ -346,10 +346,14 @@ if __name__ == "__main__":
     df_copy_train = clean.iloc[0:num_train]
     X_train = clean.iloc[0:num_train]
     y_train = X_train['labels'].values
+    print("Y TRAIN _0: ", y_train[0])
+    print("Y TRAIN _0: ", y_train[222])
+    print("Y TRAIN _0: ", y_train[111])
     # X_train = X_train.drop('labels', axis=1)
     X_test = pd.concat([clean.iloc[num_train:], fraud])
     df_copy_test = pd.concat([clean.iloc[num_train:], fraud])
     y_test = X_test['labels'].values
+    print("Y TEST _1003: ", y_test[3003])
     # X_test = X_test.drop('labels', axis=1)
 
     print(f"""Shape of the datasets:
@@ -470,9 +474,13 @@ if __name__ == "__main__":
 
     reconstructions = model_.predict(test_x)
     print("HERE..............  ::: ", reconstructions.shape, test_x.shape)
+    for i in range((test_x.shape[0])):
+        # print("test" , i , ": ",test_x[i])
+        print("recon" , i , ": ",reconstructions[i])
+
     # calculating the mean squared error reconstruction loss per row in the numpy array
     mse = np.mean(np.power(test_x - reconstructions, 2), axis=1)
-
+    print(mse.shape)
     # showing the reconstruction losses for a subsample of transactions
     print(f'Mean Squared Error reconstruction losses for {5} clean transactions:')
     print(mse[np.where(test_y == 0)][:5])

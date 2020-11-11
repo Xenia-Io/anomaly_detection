@@ -28,14 +28,15 @@ class Preprocessor():
         self.supervised = supervised
         self.visualize = visualize
         self.train_ratio = train_ratio
-        if dnn:
-            print("Start preprocessing for the Deep Neural Network..")
-            self.df = self.load_data_supervised(filename)
-        else:
-            (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
-            self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
-            self.x_all_trans_no_pca = []
-            self.x_all_median = []
+
+        # if dnn:
+        #     print("Start preprocessing for the Deep Neural Network..")
+        #     self.df = self.load_data_supervised(filename)
+        # else:
+        (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
+        self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
+        self.x_all_trans_no_pca = []
+        self.x_all_median = []
 
 
     def preprocessing(self, printing=False):
@@ -108,12 +109,12 @@ class Preprocessor():
             plt.imshow(wordcloud);
             plt.title(title, fontdict={'size': title_size, 'color': 'black',
                                        'verticalalignment': 'bottom'})
-        plt.axis('off');
+        plt.axis('off')
         plt.tight_layout()
         plt.show()
 
 
-    def load_data_supervised(self, log_file, train_ratio=0.7, printing=False):
+    def load_data_supervised(self, log_file, printing=False):
         print('====== Start loading the data ======')
 
         if log_file.endswith('.json'):
