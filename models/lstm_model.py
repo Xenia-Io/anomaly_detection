@@ -1,6 +1,11 @@
 from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+from kerastuner.engine.hyperparameters import HyperParameters
 from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras.optimizers import Adam
+# from kerastuner.tuners import RandomSearch
+from kerastuner import HyperModel
+import kerastuner as kt
 import tensorflow as tf
 import seaborn as sns
 from utils import *
@@ -11,14 +16,14 @@ import gensim
 sns.set(style='whitegrid', context='notebook')
 
 
-class LSTM_Model():
+class LSTM_Model(HyperModel):
 
-    def __init__(self, epochs= 3, optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,\
-                 epsilon=0, w_decay=0, momentum=0, dropout=0, embed_size = 300, max_features = 10000,\
-                 maxlen = 200):
+    def __init__(self, pretrained_weights, epochs=3, optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,
+                 epsilon=0, w_decay=0, momentum=0, dropout=0, embed_size=300, max_features=10000, maxlen=200):
         """
         Credits to: https://gist.github.com/maxim5/c35ef2238ae708ccb0e55624e9e0252b
         """
+        super().__init__()
         self.optimizer = optimizer
         self.batch_size = batch_size
         self.epochs = epochs
@@ -32,15 +37,23 @@ class LSTM_Model():
         self.embed_size = embed_size  # how big is each word vector
         self.max_features = max_features  # how many unique words to use (i.e num rows in embedding vector)
         self.maxlen = maxlen  # max number of words in a log message to use
+        self.emdedding_size = 64
+        self.vocab_size = 55
+        self.pretrained_weights = pretrained_weights
 
 
-    def build_lstm(self, X, vocab_size, emdedding_size, pretrained_weights):
-        print("... Start building LSTM model ...", X.shape, emdedding_size)
+    def build(self, hp):
+        print("... Start building LSTM model ...")
+
         model = Sequential()
-        model.add(Embedding(input_dim=vocab_size, output_dim=emdedding_size, weights=[pretrained_weights]))
-        model.add(LSTM(units=emdedding_size))
-        model.add(Dense(units=emdedding_size))
+        model.add(Embedding(input_dim=self.vocab_size, output_dim=self.emdedding_size, weights=[self.pretrained_weights]))
+        model.add(LSTM(units=self.emdedding_size))
+        model.add(Dense(units=self.emdedding_size))
         model.add(Activation('relu'))
+        # hp = HyperParameters()
+        hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
+        optimizer = hp.Choice('optimizer', ['adam', 'rmsprop', 'sgd', 'adagrad', 'adadelta'])
+        model.compile(optimizer, loss='binary_crossentropy', metrics=['accuracy'])
 
         return model
 
@@ -110,13 +123,26 @@ if __name__ == "__main__":
     val_y, test_x, test_y = prepare_data(preprocessor, df_copy, w2v_model)
 
     # Compile model
-    lstm = LSTM_Model()
-    model_ = lstm.build_lstm(train_x, vocab_size, emdedding_size, pretrained_weights)
-    model_.compile(loss='binary_crossentropy', optimizer='adam')
-    # # model_.compile(optimizer='adam', loss='mse')
-    model_.summary()
-    print("test_x.shape: ", test_x.shape)
+    lstm = LSTM_Model(pretrained_weights)
+    # model_ = lstm.build_lstm(train_x, vocab_size, emdedding_size, pretrained_weights)
 
+    tuner = kt.tuners.RandomSearch(
+        lstm,
+        objective='val_accuracy',
+        max_trials=20,
+        directory='my_dir')
+
+    tuner.search(train_x, train_y,
+                 validation_data=(val_x, val_y),
+                 epochs=10)
+    best_model = tuner.get_best_models(1)[0]
+    best_hyperparameters = tuner.get_best_hyperparameters(1)[0]
+    # model_.compile(optimizer='adam', loss='mse')
+    # model_.summary()
+    print("best_hyperparameters : ", best_hyperparameters.get('optimizer'))
+    print("best_hyperparameters : ", best_hyperparameters.get('learning_rate'))
+    print("test_x.shape: ", test_x.shape)
+    exit(0)
     # Visualization
     visualise_data(set_x, set_x_test, set_y, set_y_test, tsne=False, pca=False, umap=False)
 
