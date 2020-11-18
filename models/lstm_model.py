@@ -2,8 +2,6 @@ from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Acti
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from kerastuner.engine.hyperparameters import HyperParameters
 from tensorflow.keras.models import Model, Sequential
-from tensorflow.keras.optimizers import Adam
-# from kerastuner.tuners import RandomSearch
 from kerastuner import HyperModel
 import kerastuner as kt
 import tensorflow as tf
@@ -44,13 +42,18 @@ class LSTM_Model(HyperModel):
 
     def build(self, hp):
         print("... Start building LSTM model ...")
+        fc_units = self.emdedding_size/2
 
         model = Sequential()
         model.add(Embedding(input_dim=self.vocab_size, output_dim=self.emdedding_size, weights=[self.pretrained_weights]))
         model.add(LSTM(units=self.emdedding_size))
-        model.add(Dense(units=self.emdedding_size))
+        model.add(Dropout(0.3))
+        model.add(Dense(units=fc_units))
         model.add(Activation('relu'))
-        # hp = HyperParameters()
+        model.add(Dropout(0.3))
+        model.add(Dense(units=1))
+        model.add(Activation('sigmoid'))
+
         hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
         optimizer = hp.Choice('optimizer', ['adam', 'rmsprop', 'sgd', 'adagrad', 'adadelta'])
         model.compile(optimizer, loss='binary_crossentropy', metrics=['accuracy'])
@@ -74,11 +77,13 @@ class LSTM_Model(HyperModel):
 
     def detect_mad_outliers(self, points, threshold=3.5):
         # calculate the median of the input array
-        print("points_______________ ", points)
         median = np.median(points, axis=0)
 
         # calculate the absolute difference of each data point to the calculated median
         deviation = np.abs(points - median)
+        print("median = ", median)
+        print("deviation: ", deviation)
+        print("np.median(deviation): ", np.median(deviation))
 
         # take the median of those absolute differences
         med_abs_deviation = np.median(deviation)
@@ -90,10 +95,10 @@ class LSTM_Model(HyperModel):
         # return as extra information what the original mse value was at which the threshold is hit
         # need to find a way to compute this mathematically, but I'll just use the index of the nearest candidate for now
         idx = (np.abs(modified_z_score - threshold)).argmin()
-        print("idx 1: ", idx)
+
         if idx >= len(points):
             idx = np.argmin(points)
-        print("idx 2: ", idx)
+
         threshold_value = points[idx]
 
         return modified_z_score, threshold_value
@@ -126,23 +131,42 @@ if __name__ == "__main__":
     lstm = LSTM_Model(pretrained_weights)
     # model_ = lstm.build_lstm(train_x, vocab_size, emdedding_size, pretrained_weights)
 
-    tuner = kt.tuners.RandomSearch(
+    # tuner = kt.tuners.RandomSearch(
+    #     lstm,
+    #     objective='val_loss',
+    #     max_trials=20,
+    #     directory='my_dir')
+
+    tuner = kt.tuners.Hyperband(
         lstm,
-        objective='val_accuracy',
-        max_trials=20,
+        objective='val_loss',
+        max_epochs=10,
         directory='my_dir')
+
+    # tuner = kt.tuners.BayesianOptimization(
+    #         lstm,
+    #         objective='val_loss',
+    #         max_trials=10,
+    #         seed=42,
+    #         executions_per_trial=5,
+    #         directory='my_dir'
+    #     )
 
     tuner.search(train_x, train_y,
                  validation_data=(val_x, val_y),
                  epochs=10)
+
     best_model = tuner.get_best_models(1)[0]
     best_hyperparameters = tuner.get_best_hyperparameters(1)[0]
+    print("Tuner summary: ", tuner.results_summary())
+    print("Best trial: ", tuner.oracle.get_best_trials(num_trials=1)[0].hyperparameters.values)
     # model_.compile(optimizer='adam', loss='mse')
-    # model_.summary()
-    print("best_hyperparameters : ", best_hyperparameters.get('optimizer'))
-    print("best_hyperparameters : ", best_hyperparameters.get('learning_rate'))
+    best_model.summary()
+    print("best optimizer : ", best_hyperparameters.get('optimizer'))
+    print("best learning_rate: ", best_hyperparameters.get('learning_rate'))
     print("test_x.shape: ", test_x.shape)
-    exit(0)
+    # exit(0)
+
     # Visualization
     visualise_data(set_x, set_x_test, set_y, set_y_test, tsne=False, pca=False, umap=False)
 
@@ -150,7 +174,7 @@ if __name__ == "__main__":
     # tf.keras.utils.plot_model(model_, to_file=dot_img_file, show_shapes=True)
 
     # Train the model
-    history = model_.fit(
+    history = best_model.fit(
         train_x, train_y,
         epochs=lstm.epochs,
         batch_size=lstm.batch_size,
@@ -164,24 +188,49 @@ if __name__ == "__main__":
     ax.set_xlabel('Epoch')
     ax.set_ylabel("Loss")
     ax.legend(loc='upper right')
+
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
+    ax.plot(history['accuracy'], 'b', label='Train', linewidth=2)
+    ax.plot(history['val_accuracy'], 'r', label='Validation', linewidth=2)
+    ax.set_xlabel('Epoch')
+    ax.set_ylabel("Accuracy")
+    ax.legend(loc='upper right')
+
     plt.show()
 
-    # Test the models
+    # exit(0)
 
-    reconstructions = model_.predict(test_x)
-    print("HERE..............  ::: ", reconstructions.shape, test_x.shape)
-    # for i in range((test_x.shape[0])):
-    #     # print("test" , i , ": ",test_x[i])
-    #     print("recon" , i , ": ",reconstructions[i])
+    # Test the models
+    # Final evaluation of the model
+    scores = best_model.evaluate(test_x, test_y, verbose=0)
+    loss_train, accuracy_train = best_model.evaluate(train_x, train_y, verbose=False)
+    print("Training Accuracy: {:.4f}".format(accuracy_train))
+    loss_test, accuracy_test = best_model.evaluate(test_x, test_y, verbose=False)
+    print("Testing Accuracy:  {:.4f}".format(accuracy_test))
+    print("Percentage of Test Accuracy: %.2f%%" % (scores[1] * 100))
+
+    predictions = best_model.predict(test_x)
+    print("Shape of predictions and test_x : ", predictions.shape, test_x.shape)
+    # print("predictions: ", predictions)
+    # print("test_y: ", test_y)
+    # for i in range(len(test_y)):
+    #     if(test_y[i] == 1):
+    #         print("test_y is an anomaly : ", test_y[i], " in position ", i)
+    #
+    # for i in range(len(predictions)):
+    #     if(predictions[i] != 0):
+    #         print("predictions[i] is an anomaly : ", predictions[i], " in position ", i)
 
     # calculating the mean squared error reconstruction loss per row in the numpy array
-    mse = np.mean(np.power(test_x - reconstructions, 2), axis=1)
-    print(mse.shape)
+    mse = np.mean(np.power(test_y - predictions, 2), axis=1)
+    print("Shape of mse (for predictions): ", mse.shape)
     # showing the reconstruction losses for a subsample of transactions
-    print(f'Mean Squared Error reconstruction losses for {5} clean transactions:')
+    print(f'Mean Squared Error for {5} clean messages:')
     print(mse[np.where(test_y == 0)][:5])
-    print(f'\nMean Squared Error reconstruction losses for {5} fraudulent transactions:')
+    print(f'\nMean Squared Error for {5} fraudulent messages:')
     print(mse[np.where(test_y == 1)][:5])
+
+    exit(0)
 
     # adjust this parameter to customise the recall/precision trade-off
     Z_SCORE_THRESHOLD = 3
@@ -189,7 +238,7 @@ if __name__ == "__main__":
     # find the outliers on our reconstructions' mean squared errors
     mad_z_scores, threshold_value = lstm.detect_mad_outliers(mse, threshold=Z_SCORE_THRESHOLD)
     mad_outliers = (mad_z_scores > Z_SCORE_THRESHOLD).astype(int)
-    print("mad outliers of our reconstructions' MSE: ", mad_outliers)
+    print("mad outliers shape: ", mad_outliers.shape)
 
     anomalies = len(mad_outliers[mad_outliers == True])
     total_trades = len(test_y)

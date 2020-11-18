@@ -22,8 +22,8 @@ def visualise_data(set_x, set_x_test, set_y, set_y_test, tsne=False, pca=False, 
     visual_dict = {'messages': list(visualisation_initial), 'labels': list(visual_initial_y)}
 
     visual_df = pd.DataFrame(visual_dict, columns=['messages', 'labels'])
-    print("Debug : ", visualisation_initial.shape, visual_initial_y.shape)
-    print(visual_df)
+    # print("Debug : ", visualisation_initial.shape, visual_initial_y.shape)
+    # print(visual_df)
 
     # isolate features from labels
     features, labels = visual_df.drop('labels', axis=1).values, visual_df.labels.values
@@ -243,8 +243,8 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64):
     total_samples = df_copy_train.shape[0]
     total_samples_test = df_copy_test.shape[0]
     n_val = int(VALID_PER * total_samples)
-    # n_train = total_samples - n_val
-    n_train = 300
+    n_train = total_samples - n_val
+    # n_train = 10
     n_test = df_copy_test.shape[0]
 
     random_i = random.sample(range(total_samples), total_samples)
