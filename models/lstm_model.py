@@ -51,8 +51,8 @@ class LSTM_Model(HyperModel):
         model.add(Dense(units=fc_units))
         model.add(Activation('relu'))
         model.add(Dropout(0.3))
-        model.add(Dense(units=1))
-        model.add(Activation('sigmoid'))
+        model.add(Dense(units=2))
+        model.add(Activation('softmax'))
 
         hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
         optimizer = hp.Choice('optimizer', ['adam', 'rmsprop', 'sgd', 'adagrad', 'adadelta'])
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     tuner = kt.tuners.Hyperband(
         lstm,
         objective='val_loss',
-        max_epochs=10,
+        max_epochs=5,
         directory='my_dir')
 
     # tuner = kt.tuners.BayesianOptimization(
@@ -152,9 +152,13 @@ if __name__ == "__main__":
     #         directory='my_dir'
     #     )
 
-    tuner.search(train_x, train_y,
-                 validation_data=(val_x, val_y),
-                 epochs=10)
+    # use one-hot labels
+    train_y_onehot = (np.eye(2)[train_y])
+    val_y_onehot = (np.eye(2)[val_y])
+    test_y_onehot = (np.eye(2)[test_y])
+    tuner.search(train_x, train_y_onehot,
+                 validation_data=(val_x, val_y_onehot),
+                 epochs=5)
 
     best_model = tuner.get_best_models(1)[0]
     best_hyperparameters = tuner.get_best_hyperparameters(1)[0]
@@ -175,10 +179,10 @@ if __name__ == "__main__":
 
     # Train the model
     history = best_model.fit(
-        train_x, train_y,
+        train_x, train_y_onehot,
         epochs=lstm.epochs,
         batch_size=lstm.batch_size,
-        shuffle=True, validation_data=(val_x, val_y)
+        shuffle=True, validation_data=(val_x, val_y_onehot)
     ).history
 
     # Plot the training and validation loss
@@ -202,21 +206,50 @@ if __name__ == "__main__":
 
     # Test the models
     # Final evaluation of the model
-    scores = best_model.evaluate(test_x, test_y, verbose=0)
-    loss_train, accuracy_train = best_model.evaluate(train_x, train_y, verbose=False)
+    scores = best_model.evaluate(test_x, test_y_onehot, verbose=0)
+    loss_train, accuracy_train = best_model.evaluate(train_x, train_y_onehot, verbose=False)
     print("Training Accuracy: {:.4f}".format(accuracy_train))
-    loss_test, accuracy_test = best_model.evaluate(test_x, test_y, verbose=False)
+    loss_test, accuracy_test = best_model.evaluate(test_x, test_y_onehot, verbose=False)
     print("Testing Accuracy:  {:.4f}".format(accuracy_test))
     print("Percentage of Test Accuracy: %.2f%%" % (scores[1] * 100))
 
     predictions = best_model.predict(test_x)
-    print("Shape of predictions and test_x : ", predictions.shape, test_x.shape)
-    # print("predictions: ", predictions)
-    # print("test_y: ", test_y)
-    # for i in range(len(test_y)):
-    #     if(test_y[i] == 1):
-    #         print("test_y is an anomaly : ", test_y[i], " in position ", i)
-    #
+    print("Shape of predictions : ", predictions.shape)
+    print("predictions: ", predictions.shape, test_y_onehot.shape)
+    predictions = tf.one_hot(tf.argmax(predictions, axis=1), depth=2)
+    # predictions = np.argmax(predictions, axis=1)
+    print(type(predictions))
+    print("predictions: ", predictions.shape, predictions[54])
+    print("test_y: ", test_y_onehot[54])
+    print("predictions: ", predictions.shape, predictions[50])
+    print("test_y: ", test_y_onehot[50])
+    # print("predictions: ", predictions.shape, predictions[3004])
+    # print("test_y: ", test_y_onehot[3004])
+    # print("predictions: ", predictions.shape, predictions[3003])
+    # print("test_y: ", test_y_onehot[3003])
+    # print("predictions: ", predictions.shape, predictions[3001])
+    # print("test_y: ", test_y_onehot[3001])
+    # print("predictions: ", predictions.shape, predictions[3000])
+    # print("test_y: ", test_y_onehot[3000])
+    # print("predictions: ", predictions.shape, predictions[2999])
+    # print("test_y: ", test_y_onehot[2999])
+    # for i in range((predictions.shape[0])):
+    #     print(tf.keras.backend.get_value(predictions[i]))
+    #     print(test_y_onehot[i])
+    #     if predictions[i] == 1:
+    #         print("anomaly in position ", i)
+    # corrects = np.where(tf.keras.backend.get_value(predictions) - test_y_onehot == 0)
+    # num_of_corrects = len(corrects[0])
+    # print("num of corrects = ", num_of_corrects)
+    corrects_ = 0
+    for i in range(len(test_y_onehot)):
+        if((test_y_onehot[i] == tf.keras.backend.get_value(predictions[i])).all()):
+            corrects_ = corrects_ + 1
+        else:
+            print("prediction is wrong in position ", i, tf.keras.backend.get_value(predictions[i]), test_y_onehot[i])
+    print("correct predictions = ", corrects_ , " totall = ", len(test_y_onehot))
+    exit(0)
+    # #
     # for i in range(len(predictions)):
     #     if(predictions[i] != 0):
     #         print("predictions[i] is an anomaly : ", predictions[i], " in position ", i)

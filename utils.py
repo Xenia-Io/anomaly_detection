@@ -202,7 +202,7 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64):
 
     # Build train and test datasets - training set: exlusively non-fraud transactions
     num_train = int(preprocessor.train_ratio * clean.shape[0])
-    df_copy_train = clean.iloc[0:num_train]
+    df_copy_train = pd.concat([clean.iloc[0:num_train], fraud])
     df_copy_test = pd.concat([clean.iloc[num_train:], fraud])
     print(f"""Shape of the datasets:
                        training set (rows, cols) = {df_copy_train.shape}
@@ -244,7 +244,7 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64):
     total_samples_test = df_copy_test.shape[0]
     n_val = int(VALID_PER * total_samples)
     n_train = total_samples - n_val
-    # n_train = 10
+    # n_train = 100
     n_test = df_copy_test.shape[0]
 
     random_i = random.sample(range(total_samples), total_samples)
@@ -252,10 +252,10 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64):
     print("df_copy_train.shape: ", df_copy_train.shape)
     train_x = set_x[random_i[:n_train]]
     train_y = set_y[random_i[:n_train]]
-    val_x = set_x[random_i[n_train:n_train + 4]]
-    val_y = set_y[random_i[n_train:n_train + 4]]
-    test_x = set_x_test[random_j[:n_test]]
-    test_y = set_y_test[random_j[:n_test]]
+    val_x = set_x[random_i[n_train:]]
+    val_y = set_y[random_i[n_train:]]
+    test_x = set_x_test[:n_test]
+    test_y = set_y_test[:n_test]
 
 
     print("Train Shapes - X: {} - Y: {}".format(train_x.shape, train_y.shape))

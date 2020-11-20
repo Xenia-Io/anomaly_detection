@@ -1,26 +1,24 @@
-import pandas as pd
-import numpy as np
-import json
-from umap import UMAP
-from sklearn.utils import shuffle
-from feature_extractor import FeatureExtractor
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-import time
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
-import seaborn as sns
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.model_selection import train_test_split
-import warnings
 from sklearn.preprocessing import Normalizer, MinMaxScaler
+from sklearn.model_selection import train_test_split
+from mpl_toolkits.mplot3d import axes3d, Axes3D
+from feature_extractor import FeatureExtractor
 from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
-from mpl_toolkits.mplot3d import axes3d, Axes3D
+from keras.utils import to_categorical
+from sklearn.utils import shuffle
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
-import seaborn as sns
 import matplotlib.cm as cm
+import seaborn as sns
+from umap import UMAP
+import pandas as pd
+import numpy as np
+import time
+import json
 import re
-
 
 class Preprocessor():
 
@@ -141,9 +139,20 @@ class Preprocessor():
                 x_data[i] = ''.join([i for i in x_data[i] if not i.isdigit()])
             df['messages'] = x_data
 
-            # Mapping labels into integers
-            mapping = {'info': 0, 'warning': 0, 'notice': 0, 'severe': 1}
-            df = df.replace({'labels': mapping})
+            # Create mappings for labels
+            categorical_mapping = {'info': 'clean', 'warning': 'clean', 'notice': 'clean', 'severe': 'fraud'}
+            numerical_mapping = {'clean': 0, 'fraud': 1}
+
+            # Apply first categorical mapping for grouping data in two classes
+            df = df.replace({'labels': categorical_mapping})
+
+            # Create one-hot encodings
+            df['labels'] = pd.Categorical(df['labels'])
+            dum_df = pd.get_dummies(df['labels'], columns=["labels"], prefix_sep="_")
+            df = pd.concat([df, dum_df], axis=1)
+
+            # Replace categorical clean/fraud with 0/1
+            df = df.replace({'labels': numerical_mapping})
 
             if printing:
                 print("Number of log messages in the dataset: ", df.shape[0])
