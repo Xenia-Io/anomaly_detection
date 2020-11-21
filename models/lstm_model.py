@@ -2,7 +2,10 @@ from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Acti
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from kerastuner.engine.hyperparameters import HyperParameters
 from tensorflow.keras.models import Model, Sequential
+from sklearn.metrics import roc_curve, auc
+import tensorflow.keras.backend as K
 from kerastuner import HyperModel
+from sklearn import metrics
 import kerastuner as kt
 import tensorflow as tf
 import seaborn as sns
@@ -11,12 +14,14 @@ import pandas as pd
 import numpy as np
 import gensim
 
+from sklearn.metrics import classification_report, confusion_matrix
+
 sns.set(style='whitegrid', context='notebook')
 
 
 class LSTM_Model(HyperModel):
 
-    def __init__(self, pretrained_weights, epochs=3, optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,
+    def __init__(self, pretrained_weights, epochs=6, optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,
                  epsilon=0, w_decay=0, momentum=0, dropout=0, embed_size=300, max_features=10000, maxlen=200):
         """
         Credits to: https://gist.github.com/maxim5/c35ef2238ae708ccb0e55624e9e0252b
@@ -40,7 +45,35 @@ class LSTM_Model(HyperModel):
         self.pretrained_weights = pretrained_weights
 
 
+
     def build(self, hp):
+
+        def get_f1(y_true, y_pred):  # taken from old keras source code
+            true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+            possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+            predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+            precision = true_positives / (predicted_positives + K.epsilon())
+            recall = true_positives / (possible_positives + K.epsilon())
+            f1_val = 2 * (precision * recall) / (precision + recall + K.epsilon())
+            return f1_val
+
+        def recall_m(y_true, y_pred):
+            true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+            possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+            recall = true_positives / (possible_positives + K.epsilon())
+            return recall
+
+        def precision_m(y_true, y_pred):
+            true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+            predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+            precision = true_positives / (predicted_positives + K.epsilon())
+            return precision
+
+        def f1_m(y_true, y_pred):
+            precision = precision_m(y_true, y_pred)
+            recall = recall_m(y_true, y_pred)
+            return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
+
         print("... Start building LSTM model ...")
         fc_units = self.emdedding_size/2
 
@@ -56,7 +89,7 @@ class LSTM_Model(HyperModel):
 
         hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
         optimizer = hp.Choice('optimizer', ['adam', 'rmsprop', 'sgd', 'adagrad', 'adadelta'])
-        model.compile(optimizer, loss='binary_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer, loss='binary_crossentropy', metrics=['acc', f1_m, precision_m, recall_m])
 
         return model
 
@@ -193,125 +226,69 @@ if __name__ == "__main__":
     ax.set_ylabel("Loss")
     ax.legend(loc='upper right')
 
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
-    ax.plot(history['accuracy'], 'b', label='Train', linewidth=2)
-    ax.plot(history['val_accuracy'], 'r', label='Validation', linewidth=2)
-    ax.set_xlabel('Epoch')
-    ax.set_ylabel("Accuracy")
-    ax.legend(loc='upper right')
+    # fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
+    # ax.plot(history['get_f1'], 'b', label='Train', linewidth=2)
+    # ax.plot(history['val_get_f1'], 'r', label='Validation', linewidth=2)
+    # ax.set_xlabel('Epoch')
+    # ax.set_ylabel("Accuracy")
+    # ax.legend(loc='upper right')
 
     plt.show()
 
     # exit(0)
 
-    # Test the models
-    # Final evaluation of the model
-    scores = best_model.evaluate(test_x, test_y_onehot, verbose=0)
-    loss_train, accuracy_train = best_model.evaluate(train_x, train_y_onehot, verbose=False)
-    print("Training Accuracy: {:.4f}".format(accuracy_train))
-    loss_test, accuracy_test = best_model.evaluate(test_x, test_y_onehot, verbose=False)
-    print("Testing Accuracy:  {:.4f}".format(accuracy_test))
-    print("Percentage of Test Accuracy: %.2f%%" % (scores[1] * 100))
+    # Test the model
+    # scores = best_model.evaluate(test_x, test_y_onehot, verbose=0)
+    # loss_train, accuracy_train = best_model.evaluate(train_x, train_y_onehot, verbose=False)
+    # print("Training Accuracy: {:.4f}".format(accuracy_train))
+    # loss_test, accuracy_test = best_model.evaluate(test_x, test_y_onehot, verbose=False)
+    # print("Testing Accuracy:  {:.4f}".format(accuracy_test))
+    # print("Percentage of Test Accuracy: %.2f%%" % (scores[1] * 100))
 
     predictions = best_model.predict(test_x)
-    print("Shape of predictions : ", predictions.shape)
-    print("predictions: ", predictions.shape, test_y_onehot.shape)
+
+    print("Shape of predictions and test_y: ", predictions.shape, test_y_onehot.shape)
     predictions = tf.one_hot(tf.argmax(predictions, axis=1), depth=2)
-    # predictions = np.argmax(predictions, axis=1)
-    print(type(predictions))
-    print("predictions: ", predictions.shape, predictions[54])
-    print("test_y: ", test_y_onehot[54])
-    print("predictions: ", predictions.shape, predictions[50])
-    print("test_y: ", test_y_onehot[50])
-    # print("predictions: ", predictions.shape, predictions[3004])
-    # print("test_y: ", test_y_onehot[3004])
-    # print("predictions: ", predictions.shape, predictions[3003])
-    # print("test_y: ", test_y_onehot[3003])
-    # print("predictions: ", predictions.shape, predictions[3001])
-    # print("test_y: ", test_y_onehot[3001])
-    # print("predictions: ", predictions.shape, predictions[3000])
-    # print("test_y: ", test_y_onehot[3000])
-    # print("predictions: ", predictions.shape, predictions[2999])
-    # print("test_y: ", test_y_onehot[2999])
-    # for i in range((predictions.shape[0])):
-    #     print(tf.keras.backend.get_value(predictions[i]))
-    #     print(test_y_onehot[i])
-    #     if predictions[i] == 1:
-    #         print("anomaly in position ", i)
-    # corrects = np.where(tf.keras.backend.get_value(predictions) - test_y_onehot == 0)
-    # num_of_corrects = len(corrects[0])
-    # print("num of corrects = ", num_of_corrects)
+
     corrects_ = 0
     for i in range(len(test_y_onehot)):
         if((test_y_onehot[i] == tf.keras.backend.get_value(predictions[i])).all()):
+            # print(test_y_onehot[i], "  - target // ", tf.keras.backend.get_value(predictions[i]), " - prediction")
+
             corrects_ = corrects_ + 1
         else:
-            print("prediction is wrong in position ", i, tf.keras.backend.get_value(predictions[i]), test_y_onehot[i])
+            print(type(test_y_onehot[i]))
+            # print("prediction is wrong in position ", i, " with prediction: ", \
+            # tf.keras.backend.get_value(predictions[i]), " and target " ,test_y_onehot[i])
     print("correct predictions = ", corrects_ , " totall = ", len(test_y_onehot))
-    exit(0)
-    # #
-    # for i in range(len(predictions)):
-    #     if(predictions[i] != 0):
-    #         print("predictions[i] is an anomaly : ", predictions[i], " in position ", i)
+    accuracy_test_ = round((corrects_ / len(test_y_onehot))*100, 4)
+    print("Test accuracy: ", accuracy_test_, "%")
 
-    # calculating the mean squared error reconstruction loss per row in the numpy array
-    mse = np.mean(np.power(test_y - predictions, 2), axis=1)
-    print("Shape of mse (for predictions): ", mse.shape)
-    # showing the reconstruction losses for a subsample of transactions
-    print(f'Mean Squared Error for {5} clean messages:')
-    print(mse[np.where(test_y == 0)][:5])
-    print(f'\nMean Squared Error for {5} fraudulent messages:')
-    print(mse[np.where(test_y == 1)][:5])
+    # evaluate the model
+    loss, accuracy, f1_score, precision, recall = best_model.evaluate(test_x, test_y_onehot, verbose=0)
 
-    exit(0)
+    print("\n ************ Print test metrics ************ \n")
+    print("F1-score: ", round(f1_score*100, 2), "%")
+    print("Precision: ", round(precision*100, 2), "%")
+    print("Recall: ", round(recall*100, 2), "%")
+    print("Loss: ", round(loss*100, 2), "%")
+    print("Accuracy: ", round(accuracy*100, 2), "%")
 
-    # adjust this parameter to customise the recall/precision trade-off
-    Z_SCORE_THRESHOLD = 3
+    test_y = np.argmax(test_y_onehot, axis=-1)  # getting the labels
+    y_prediction = np.argmax(predictions, axis=-1)  # getting the confidence of postive class
+    fpr_roc, tpr_roc, thresholds_roc = roc_curve(test_y, y_prediction)
 
-    # find the outliers on our reconstructions' mean squared errors
-    mad_z_scores, threshold_value = lstm.detect_mad_outliers(mse, threshold=Z_SCORE_THRESHOLD)
-    mad_outliers = (mad_z_scores > Z_SCORE_THRESHOLD).astype(int)
-    print("mad outliers shape: ", mad_outliers.shape)
-
-    anomalies = len(mad_outliers[mad_outliers == True])
-    total_trades = len(test_y)
-    d = (anomalies / total_trades * 100)
-
-    print("MAD Z-score > ", Z_SCORE_THRESHOLD, " is the selected threshold.")
-    print("Any trade with a MSRE >= ", threshold_value, " is flagged.")
-    print("This results in", anomalies, "detected anomalies, or ", d, "% out of ", total_trades, "trades reported")
-
-    data = np.column_stack((range(len(mse)), mse))
-    print("data =", type(data), data)
-    # scatter's x & y
-    clean_x, clean_y = data[test_y == 0][:, 0], data[test_y == 0][:, 1]
-    fraud_x, fraud_y = data[test_y == 1][:, 0], data[test_y == 1][:, 1]
-    print("clean x,y : ", clean_x, clean_y)
-    print("fraud x,y : ", fraud_x, fraud_y)
-
-    # instantiate new figure
-    fig, ax = plt.subplots(figsize=(15, 8))
-
-    # plot reconstruction errors
-    ax.scatter(clean_x, clean_y, s=20, color='g', alpha=0.6, label='Clean')
-    ax.scatter(fraud_x, fraud_y, s=30, color='r', alpha=1, label='Fraud')
-
-    # MAD threshold line
-    ax.plot([threshold_value for i in range(len(mse))], color='orange', linewidth=1.5,
-            label='MAD threshold')
-
-    # change scale to log & limit x-axis range
-    ax.set_yscale('log')
-    ax.set_xlim(0, (len(mse) + 100))
-
-    # title & labels
-    fig.suptitle('Mean Squared Reconstruction Errors & MAD Threshold', fontsize=14)
-    ax.set_xlabel('Pseudo Message ID\n(Index in MSE List)')
-    ax.set_ylabel('Mean Squared Error\n(Log Scale)')
-
-    # orange legend for threshold value
-    ax.legend(loc='lower left', prop={'size': 9})
-
-    # display
-    fig.show()
+    roc_auc = metrics.auc(fpr_roc, tpr_roc)
+    print("auc = ", roc_auc)
+    plt.figure()
+    lw = 2
+    plt.plot(fpr_roc, tpr_roc, color='darkorange',
+             lw=lw, label='ROC curve ' )
+    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic example')
+    plt.legend(loc="lower right")
     plt.show()
