@@ -189,7 +189,7 @@ def test_NLP_model(model):
     print(model.wv.similarity(w1, "alarm"))
 
 
-def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64):
+def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
     print('\nPreparing the data for VAE...')
     DROP_THRESHOLD = 1
 
@@ -202,8 +202,13 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64):
 
     # Build train and test datasets - training set: exlusively non-fraud transactions
     num_train = int(preprocessor.train_ratio * clean.shape[0])
-    df_copy_train = pd.concat([clean.iloc[0:num_train], fraud])
-    df_copy_test = pd.concat([clean.iloc[num_train:], fraud])
+    if is_LSTM:
+        df_copy_train = pd.concat([clean.iloc[0:num_train], fraud])
+        df_copy_test = pd.concat([clean.iloc[num_train:], fraud])
+    else:
+        df_copy_train = clean.iloc[0:num_train]
+        df_copy_test = pd.concat([clean.iloc[num_train:], fraud])
+
     print(f"""Shape of the datasets:
                        training set (rows, cols) = {df_copy_train.shape}
                        test set (rows, cols) = {df_copy_test.shape}""")
@@ -249,7 +254,8 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64):
 
     random_i = random.sample(range(total_samples), total_samples)
     random_j = random.sample(range(total_samples_test), total_samples_test)
-    print("df_copy_train.shape: ", df_copy_train.shape)
+    print("df_copy_train.shape: ", df_copy_train.shape) # (7006, 4)
+
     train_x = set_x[random_i[:n_train]]
     train_y = set_y[random_i[:n_train]]
     val_x = set_x[random_i[n_train:]]
