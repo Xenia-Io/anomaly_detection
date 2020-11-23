@@ -3,6 +3,7 @@ from pre_processor import Preprocessor
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
+from pandas import DataFrame
 import multiprocessing
 from time import time
 from umap import UMAP
@@ -203,7 +204,13 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
     # Build train and test datasets - training set: exlusively non-fraud transactions
     num_train = int(preprocessor.train_ratio * clean.shape[0])
     if is_LSTM:
-        df_copy_train = pd.concat([clean.iloc[0:num_train], fraud])
+        partition_idx = len(fraud.index) / 2
+        print(len(fraud.index))
+        df_fraud_train = fraud.iloc[0:int(partition_idx), :]
+        print("debug : ", len(df_fraud_train.index))
+        df_copy_train = pd.concat([clean.iloc[0:num_train], df_fraud_train])
+
+        print(df_copy_train)
         df_copy_test = pd.concat([clean.iloc[num_train:], fraud])
     else:
         df_copy_train = clean.iloc[0:num_train]

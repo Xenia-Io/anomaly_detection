@@ -158,7 +158,7 @@ if __name__ == "__main__":
 
     # Data preparation for feeding the network
     set_x, set_x_test, set_y, set_y_test, train_x, train_y, val_x, \
-    val_y, test_x, test_y = prepare_data(preprocessor, df_copy, w2v_model)
+    val_y, test_x, test_y = prepare_data(preprocessor, df_copy, w2v_model, is_LSTM=True)
 
     # Compile model
     lstm = LSTM_Model(pretrained_weights)
@@ -186,9 +186,10 @@ if __name__ == "__main__":
     #     )
 
     # use one-hot labels
-    train_y_onehot = (np.eye(2)[train_y])
-    val_y_onehot = (np.eye(2)[val_y])
-    test_y_onehot = (np.eye(2)[test_y])
+    train_y_onehot = (np.eye(2)[train_y]) # shape = (5956, 2)
+    val_y_onehot = (np.eye(2)[val_y])     # shape = (1050, 2)
+    test_y_onehot = (np.eye(2)[test_y])   # shape = (3006, 2)
+
     tuner.search(train_x, train_y_onehot,
                  validation_data=(val_x, val_y_onehot),
                  epochs=5)
@@ -197,7 +198,7 @@ if __name__ == "__main__":
     best_hyperparameters = tuner.get_best_hyperparameters(1)[0]
     print("Tuner summary: ", tuner.results_summary())
     print("Best trial: ", tuner.oracle.get_best_trials(num_trials=1)[0].hyperparameters.values)
-    # model_.compile(optimizer='adam', loss='mse')
+
     best_model.summary()
     print("best optimizer : ", best_hyperparameters.get('optimizer'))
     print("best learning_rate: ", best_hyperparameters.get('learning_rate'))
@@ -258,8 +259,9 @@ if __name__ == "__main__":
             corrects_ = corrects_ + 1
         else:
             print(type(test_y_onehot[i]))
-            # print("prediction is wrong in position ", i, " with prediction: ", \
-            # tf.keras.backend.get_value(predictions[i]), " and target " ,test_y_onehot[i])
+            print("prediction is wrong in position ", i, " with prediction: ", \
+            tf.keras.backend.get_value(predictions[i]), " and target " ,test_y_onehot[i])
+
     print("correct predictions = ", corrects_ , " totall = ", len(test_y_onehot))
     accuracy_test_ = round((corrects_ / len(test_y_onehot))*100, 4)
     print("Test accuracy: ", accuracy_test_, "%")
