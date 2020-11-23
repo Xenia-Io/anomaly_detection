@@ -2,6 +2,7 @@ from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Acti
 from tensorflow.python.keras.layers import RepeatVector, TimeDistributed, Layer, Reshape
 from kerastuner.engine.hyperparameters import HyperParameters
 from tensorflow.keras.models import Model, Sequential
+from sklearn.ensemble import RandomForestClassifier
 from tensorflow.keras import layers, regularizers
 from tensorflow.keras.optimizers import SGD
 from kerastuner.tuners import RandomSearch
@@ -9,6 +10,7 @@ import tensorflow.keras.losses as tf_losses
 import tensorflow.keras.backend as bck
 import tensorflow_probability as tfp
 from kerastuner import HyperModel
+from sklearn import metrics
 import kerastuner as kt
 import tensorflow as tf
 from utils import *
@@ -208,7 +210,7 @@ if __name__ == "__main__":
     # Train the model
     history = vae.fit(
         train_x, train_x,
-        epochs=5,
+        epochs=3,
         batch_size=10,
         validation_data=(val_x, val_x),
         shuffle=True
@@ -225,13 +227,47 @@ if __name__ == "__main__":
     ax.legend(loc='upper right')
     plt.show()
 
-    # plot_label_clusters(encoder, train_x, train_y)
+    # plot_label_clusters(vae.encoder, train_x, train_y)
 
 
     # Test the mode
     encoded_inputs = vae.encoder.predict(test_x)
     reconstructions = vae.decoder.predict(encoded_inputs)
-    print("reconstructions and train_x shapes : ", reconstructions.shape, test_x.shape)
+    # print("reconstructions and train_x shapes : ", reconstructions.shape, test_x.shape) # (3006, 64) both
+    # print("reconstruction sample[0]: ", reconstructions[0])
+    # print("test_x sample[0]: ", test_x[0])
+    # print("test_y sample[0]: ", test_y[0])
+    # print("test_x sample[102]: ", test_x[102])
+    # print("test_y sample[102]: ", test_y[102])
+    # print(type(reconstructions), type(test_x))
+    # print(type(reconstructions[0]), type(test_x[0]))
+    encoded_inputs = vae.encoder.predict(train_x)
+    reconstructions_train = vae.decoder.predict(encoded_inputs)
+    mse_train = np.mean(np.power(train_x - reconstructions_train, 2), axis=1)
+    mse_test = np.mean(np.power(test_x - reconstructions, 2), axis=1)
+    mse_test_data = np.column_stack((range(len(mse_test)), mse_test))
+
+    # scatter's x & y
+    clean_x, clean_y = mse_test_data[test_y == 0][:, 0], mse_test_data[test_y == 0][:, 1]
+    fraud_x, fraud_y = mse_test_data[test_y == 1][:, 0], mse_test_data[test_y == 1][:, 1]
+    print("clean x,y : ", clean_x, clean_y)
+    print("fraud x,y : ", fraud_x, fraud_y)
+
+    # Create a Gaussian Classifier
+    clf = RandomForestClassifier(n_estimators=100)
+
+    print(train_x.shape, mse_train.shape, train_y.shape)
+    # Train the model using the training set
+    clf.fit(mse_train.reshape(-1, 1), train_y)
+
+    # prediction on test set
+    y_pred = clf.predict(mse_test.reshape(-1, 1))
+
+    # Model Accuracy, how often is the classifier correct?
+    print("RandomForest classifier's Accuracy: ", metrics.accuracy_score(test_y, y_pred))
+
+
+    exit(0)
     # calculating the mean squared error reconstruction loss per row in the numpy array
     mse = np.mean(np.power(test_x - reconstructions, 2), axis=1)
 
