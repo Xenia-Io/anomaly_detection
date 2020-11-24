@@ -1,8 +1,12 @@
+from sklearn.tree import plot_tree
 from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Lambda
 from tensorflow.python.keras.layers import RepeatVector, TimeDistributed, Layer, Reshape
 from kerastuner.engine.hyperparameters import HyperParameters
 from tensorflow.keras.models import Model, Sequential
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import (RandomForestClassifier, ExtraTreesClassifier,
+                              AdaBoostClassifier)
+from sklearn.tree import DecisionTreeClassifier
+
 from tensorflow.keras import layers, regularizers
 from tensorflow.keras.optimizers import SGD
 from kerastuner.tuners import RandomSearch
@@ -15,6 +19,12 @@ import kerastuner as kt
 import tensorflow as tf
 from utils import *
 import time
+
+from matplotlib.colors import ListedColormap
+# Import statements required for Plotly
+import plotly.offline as py
+import plotly.graph_objs as go
+from plotly import tools
 
 tfd = tfp.distributions
 
@@ -173,6 +183,109 @@ class VAE(tf.keras.Model):
         return word_model.wv.index2word[idx]
 
 
+def plot_decision_boundary(mse_test_data, test_y):
+    # Parameters
+    n_classes = 3
+    n_estimators = 30
+    cmap = plt.cm.RdYlBu
+    plot_step = 0.02  # fine step width for decision surface contours
+    plot_step_coarser = 0.5  # step widths for coarse classifier guesses
+    RANDOM_SEED = 13  # fix the seed on each iteration
+
+    plot_idx = 1
+
+    models = [DecisionTreeClassifier(max_depth=None),
+              RandomForestClassifier(n_estimators=n_estimators),
+              ExtraTreesClassifier(n_estimators=n_estimators),
+              AdaBoostClassifier(DecisionTreeClassifier(max_depth=3),
+                                 n_estimators=n_estimators)]
+
+    for model in models:
+
+        # Shuffle
+        idx = np.arange(mse_test_data.shape[0])
+        np.random.seed(RANDOM_SEED)
+        np.random.shuffle(idx)
+        mse_test_data = mse_test_data[idx]
+        y = test_y[idx]
+
+        # Standardize
+        mean = mse_test_data.mean(axis=0)
+        std = mse_test_data.std(axis=0)
+        mse_test_data = (mse_test_data - mean) / std
+
+        # Train
+        model.fit(mse_test_data, y)
+
+        scores = model.score(mse_test_data, y)
+        # Create a title for each column and the console by using str() and
+        # slicing away useless parts of the string
+        model_title = str(type(model)).split(
+            ".")[-1][:-2][:-len("Classifier")]
+
+        model_details = model_title
+        if hasattr(model, "estimators_"):
+            model_details += " with {} estimators".format(
+                len(model.estimators_))
+        print(model_details, " has a score of ", scores)
+
+        plt.subplot(2, 2, plot_idx)
+
+        if plot_idx <= len(models):
+            # Add a title at the top of each column
+            plt.title(model_title, fontsize=9)
+
+        # Now plot the decision boundary using a fine mesh as input to a
+        # filled contour plot
+        x_min, x_max = mse_test_data[:, 0].min() - 1, mse_test_data[:, 0].max() + 1
+        y_min, y_max = mse_test_data[:, 1].min() - 1, mse_test_data[:, 1].max() + 1
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, plot_step),
+                             np.arange(y_min, y_max, plot_step))
+
+        # Plot either a single DecisionTreeClassifier or alpha blend the
+        # decision surfaces of the ensemble of classifiers
+        if isinstance(model, DecisionTreeClassifier):
+            Z = model.predict(np.c_[xx.ravel(), yy.ravel()])
+            Z = Z.reshape(xx.shape)
+            cs = plt.contourf(xx, yy, Z, cmap=cmap)
+        else:
+            # Choose alpha blend level with respect to the number
+            # of estimators
+            # that are in use (noting that AdaBoost can use fewer estimators
+            # than its maximum if it achieves a good enough fit early on)
+            estimator_alpha = 1.0 / len(model.estimators_)
+            for tree in model.estimators_:
+                Z = tree.predict(np.c_[xx.ravel(), yy.ravel()])
+                Z = Z.reshape(xx.shape)
+                cs = plt.contourf(xx, yy, Z, alpha=estimator_alpha, cmap=cmap)
+
+        # Build a coarser grid to plot a set of ensemble classifications
+        # to show how these are different to what we see in the decision
+        # surfaces. These points are regularly space and do not have a
+        # black outline
+        xx_coarser, yy_coarser = np.meshgrid(
+            np.arange(x_min, x_max, plot_step_coarser),
+            np.arange(y_min, y_max, plot_step_coarser))
+        Z_points_coarser = model.predict(np.c_[xx_coarser.ravel(),
+                                               yy_coarser.ravel()]
+                                         ).reshape(xx_coarser.shape)
+        cs_points = plt.scatter(xx_coarser, yy_coarser, s=15,
+                                c=Z_points_coarser, cmap=cmap,
+                                edgecolors="none")
+
+        # Plot the training points, these are clustered together and have a
+        # black outline
+        plt.scatter(mse_test_data[:, 0], mse_test_data[:, 1], c=y,
+                    cmap=ListedColormap(['r', 'y', 'b']),
+                    edgecolor='k', s=20)
+        plot_idx += 1  # move on to the next plot in sequence
+
+    plt.suptitle("Classifiers", fontsize=12)
+    plt.axis("tight")
+    plt.tight_layout(h_pad=0.2, w_pad=0.2, pad=2.5)
+    plt.show()
+
+
 if __name__ == "__main__":
     tf.config.experimental_run_functions_eagerly(True)
     print(tf.__version__)
@@ -210,7 +323,7 @@ if __name__ == "__main__":
     # Train the model
     history = vae.fit(
         train_x, train_x,
-        epochs=3,
+        epochs=1,
         batch_size=10,
         validation_data=(val_x, val_x),
         shuffle=True
@@ -254,7 +367,7 @@ if __name__ == "__main__":
     print("fraud x,y : ", fraud_x, fraud_y)
 
     # Create a Gaussian Classifier
-    clf = RandomForestClassifier(n_estimators=100)
+    clf = RandomForestClassifier(max_depth=4, n_estimators=20)
 
     print(train_x.shape, mse_train.shape, train_y.shape)
     # Train the model using the training set
@@ -266,8 +379,14 @@ if __name__ == "__main__":
     # Model Accuracy, how often is the classifier correct?
     print("RandomForest classifier's Accuracy: ", metrics.accuracy_score(test_y, y_pred))
 
+    # Plot decision boundary
+    plot_decision_boundary(mse_test_data, test_y)
 
     exit(0)
+
+
+
+
     # calculating the mean squared error reconstruction loss per row in the numpy array
     mse = np.mean(np.power(test_x - reconstructions, 2), axis=1)
 
