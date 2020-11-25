@@ -201,7 +201,7 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
                    clean (rows, cols) = {clean.shape}
                    fraud (rows, cols) = {fraud.shape}""")
 
-    # Build train and test datasets - training set: exlusively non-fraud transactions
+    # Build train and test datasets - training set
     num_train = int(preprocessor.train_ratio * clean.shape[0])
     if is_LSTM:
         partition_idx = len(fraud.index) / 2
@@ -256,11 +256,11 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
     total_samples_test = df_copy_test.shape[0]
     n_val = int(VALID_PER * total_samples)
     n_train = total_samples - n_val
-    # n_train = 100
+    # n_train = 200
     n_test = df_copy_test.shape[0]
 
     random_i = random.sample(range(total_samples), total_samples)
-    random_j = random.sample(range(total_samples_test), total_samples_test)
+    # random_j = random.sample(range(total_samples_test), total_samples_test)
     print("df_copy_train.shape: ", df_copy_train.shape) # (7006, 4)
 
     train_x = set_x[random_i[:n_train]]
@@ -284,8 +284,8 @@ def plot_label_clusters(encoder, data, labels):
     plt.figure(figsize=(12, 10))
     plt.scatter(z_mean[:, 0], z_mean[:, 1], c=labels)
     plt.colorbar()
-    plt.xlabel("z[0]")
-    plt.ylabel("z[1]")
+    plt.xlabel("z_mean[0]")
+    plt.ylabel("z_mean[1]")
     plt.title("A 2D plot of the classes in the latent space")
     plt.show()
 

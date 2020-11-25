@@ -183,7 +183,7 @@ class VAE(tf.keras.Model):
         return word_model.wv.index2word[idx]
 
 
-def plot_decision_boundary(mse_test_data, test_y):
+def plot_decision_boundary(mse_data, y):
     # Parameters
     n_estimators = 20
     cmap = plt.cm.RdYlBu
@@ -202,25 +202,16 @@ def plot_decision_boundary(mse_test_data, test_y):
     for model in models:
 
         # Shuffle
-        idx = np.arange(mse_test_data.shape[0])
+        idx = np.arange(mse_data.shape[0])
         np.random.seed(RANDOM_SEED)
         np.random.shuffle(idx)
-        X = mse_test_data[idx]
-        y = test_y[idx]
-        # idx_ = np.arange(mse_train_data.shape[0])
-        # np.random.seed(RANDOM_SEED)
-        # np.random.shuffle(idx_)
-        # X_train = mse_train_data[idx_]
-        # y_train = train_y[idx_]
+        X = mse_data[idx]
+        y = y[idx]
 
         # Standardize
         mean = X.mean(axis=0)
         std = X.std(axis=0)
         X = (X - mean) / std
-
-        # mean_ = X_train.mean(axis=0)
-        # std_ = X_train.std(axis=0)
-        # X_train = (X_train - mean_) / std_
 
         # Train
         model.fit(X, y)
@@ -290,7 +281,7 @@ def plot_decision_boundary(mse_test_data, test_y):
                     edgecolor='k', s=20)
         plot_idx += 1  # move on to the next plot in sequence
 
-    plt.suptitle("Classifiers", fontsize=12)
+    plt.suptitle("Decision surfaces for different classifiers", fontsize=12)
     plt.axis("tight")
     plt.tight_layout(h_pad=0.2, w_pad=0.2, pad=2.5)
     plt.show()
@@ -403,43 +394,185 @@ def plot_decision_boundary_2(mse_train_data, y_train_, mse_test_data, y_test_):
                     edgecolor='k', s=20)
         plot_idx += 1  # move on to the next plot in sequence
 
-    plt.suptitle("Classifiers", fontsize=12)
+    plt.suptitle("Decision surfaces for different classifiers", fontsize=12)
     plt.axis("tight")
     plt.tight_layout(h_pad=0.2, w_pad=0.2, pad=2.5)
     plt.show()
 
 
-def plot_decision_surfaces(mse_test_data, test_y, mse_train_data, train_y):
-    names = ["Decision Tree", "Random Forest", "ExtraTrees"]
-    # Creating a Python List with our three Tree classifiers
-    treeclassifiers = [
-        DecisionTreeClassifier(max_depth=5),
-        RandomForestClassifier(max_depth=5, n_estimators=20, max_features=1),
-        ExtraTreesClassifier()]
+def check_overfitting(mse_train_data, y_train_, mse_test_data, y_test_):
+    """
+    Check overfitting on decision boundaries for different RandomForest
+    classifiers
+    :return: Plots
+    """
+    h= 0.02
+    cmap = plt.cm.RdYlBu
+    plot_step = 0.02  # fine step width for decision surface contours
+    plot_step_coarser = 0.5  # step widths for coarse classifier guesses
+    RANDOM_SEED = 13  # fix the seed on each iteration
 
-    figure = plt.figure(figsize=(12, 10))
-    h = 0.02
-    i = 1
+    plot_idx = 1
+    tree_maxdepth = 3
+    tree_overfitting_maxdepth = 100
+    trees = RandomForestClassifier(max_depth=tree_maxdepth,
+                                   n_estimators=10,
+                                   random_state=0)
 
-    x_min, x_max = mse_train_data[:, 0].min() - .5, mse_train_data[:, 0].max() + .5
-    y_min, y_max = mse_train_data[:, 1].min() - .5, mse_train_data[:, 1].max() + .5
-    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                         np.arange(y_min, y_max, h))
+    trees_overfit = RandomForestClassifier(max_depth=tree_overfitting_maxdepth,
+                                           n_estimators=50,
+                                           random_state=0)
 
-    # just plot the dataset first
-    cm = plt.cm.jet
+    # Shuffle
+    idx = np.arange(mse_test_data.shape[0])
+    np.random.seed(RANDOM_SEED)
+    np.random.shuffle(idx)
+    X = mse_test_data[idx]
+    y = y_test_[idx]
+    idx_ = np.arange(mse_train_data.shape[0])
+    np.random.seed(RANDOM_SEED)
+    np.random.shuffle(idx_)
+    X_train = mse_train_data[idx_]
+    y_train = y_train_[idx_]
+
+    # Standardize
+    mean = X.mean(axis=0)
+    std = X.std(axis=0)
+    X = (X - mean) / std
+
+    mean_ = X_train.mean(axis=0)
+    std_ = X_train.std(axis=0)
+    X_train = (X_train - mean_) / std_
+
+    # Train
+    trees.fit(X_train, y_train)
+    trees_overfit.fit(X_train, y_train)
+
+    x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+    y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h)
+                         , np.arange(y_min, y_max, h))
+    y_ = np.arange(y_min, y_max, h)
+
+    Z = trees.predict(np.c_[xx.ravel(), yy.ravel()])
+    Z = Z.reshape(xx.shape)
+
+    # fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
+    fig = tools.make_subplots(rows=1, cols=2,
+                              subplot_titles=(("Random Forest with Depth = "+ str(tree_maxdepth)),
+                                              ("Random Forest with Depth = "+ str(tree_overfitting_maxdepth)))
+                              )
+
+    trace1 = go.Heatmap(x=xx[0], y=y_, z=Z,
+                        colorscale='Viridis',
+                        showscale=False)
+
+    trace2 = go.Scatter(x=X[:, 0], y=X[:, 1],
+                        mode='markers',
+                        showlegend=False,
+                        marker=dict(size=10,
+                                    color=y,
+                                    colorscale='Viridis',
+                                    line=dict(color='black', width=1))
+                        )
+
+    fig.append_trace(trace1, 1, 1)
+    fig.append_trace(trace2, 1, 1)
+
+    # transform grid using ExtraTreesClassifier
+    # y_grid_pred = trees.predict_proba(np.c_[xx.ravel(), yy.ravel()])[:, 1]
+
+    Z = trees_overfit.predict(np.c_[xx.ravel(), yy.ravel()])
+    Z = Z.reshape(xx.shape)
+
+    trace3 = go.Heatmap(x=xx[0], y=y_,
+                        z=Z,
+                        colorscale='Viridis',
+                        showscale=True)
+
+    trace4 = go.Scatter(x=X[:, 0], y=X[:, 1],
+                        mode='markers',
+                        showlegend=False,
+                        marker=dict(size=10,
+                                    color=y,
+                                    colorscale='Viridis',
+                                    line=dict(color='black', width=1))
+                        )
+    fig.append_trace(trace3, 1, 2)
+    fig.append_trace(trace4, 1, 2)
+
+    for i in map(str, range(1, 3)):
+        x = 'xaxis' + i
+        y = 'yaxis' + i
+        fig['layout'][x].update(showgrid=False,
+                                zeroline=False,
+                                showticklabels=False,
+                                ticks='',
+                                autorange=True)
+        fig['layout'][y].update(showgrid=False,
+                                zeroline=False,
+                                showticklabels=False,
+                                ticks='',
+                                autorange=True)
+
+    fig.show()
+
+
+def splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y):
+    mse_all = np.concatenate((mse_train_val, mse_test), axis=0)
+    mse_all_data = np.column_stack((range(len(mse_all)), mse_all))
+    y_train_val = np.concatenate((train_y, val_y), axis=0)
+    y_all = np.concatenate((y_train_val, test_y), axis=0)
+    for i in range(len(y_all)):
+        if (y_all[i] == 1):
+            print("i = ", i, " is label ", y_all[i])
+
+    print("mse_all shape: ", mse_all_data.shape)
+    print("y_all len: ", len(y_all))
+
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
     cm_bright = ListedColormap(['#FF0000', '#0000FF'])
-    ax = plt.subplot(111)
-    # Plot the training points
-    ax.scatter(mse_train_data[:, 0], mse_train_data[:, 1], c=train_y, cmap=cm_bright, alpha=0.7)
-    print(train_y)
-    # and testing points
-    # ax.scatter(X_test[:, 0], X_test[:, 1], c=y_test, cmap=cm_bright, alpha=0.6)
-
-    i += 1
-
-    # figure.subplots_adjust(left=.02, right=.98)
+    ax.scatter(mse_all_data[:, 0], mse_all_data[:, 1], c=y_all, cmap=cm_bright, alpha=0.6)
+    plt.title("2D plot MSE points grouped by class")
     plt.show()
+
+    # scatter's x & y
+    clean_x, clean_y = mse_all_data[y_all == 0][:, 0], mse_all_data[y_all == 0][:, 1]
+    fraud_x, fraud_y = mse_all_data[y_all == 1][:, 0], mse_all_data[y_all == 1][:, 1]
+    print("clean x,y : ", clean_x, clean_y)
+    print("fraud x,y : ", fraud_x, fraud_y)
+
+    _df = pd.DataFrame({'mse': mse_all, 'labels': y_all})
+    fraud = _df[_df.labels == 1]
+    clean = _df[_df.labels == 0]
+
+    num_train = int(0.6 * clean.shape[0])
+
+    partition_idx = len(fraud.index) / 2
+    print(len(fraud.index))
+    df_fraud_train = fraud.iloc[0:int(partition_idx), :]
+    print("debug : ", len(df_fraud_train.index))
+    df_copy_train = pd.concat([clean.iloc[0:num_train], df_fraud_train])
+
+    print(df_copy_train.shape)
+    df_copy_test = pd.concat([clean.iloc[num_train:], fraud])
+    print("XENIA 1 \n", df_copy_train.shape)
+    print("XENIA 2 \n", df_copy_test.shape)
+
+    mse_train = df_copy_train.mse.values
+    mse_train_data = np.column_stack((range(len(mse_train)), mse_train))
+    y_train_ = df_copy_train.labels.values
+    print(",,,, ", mse_train_data.shape, type(mse_train_data))
+    print("---- ", len(y_train_), type(y_train_.tolist()), y_train_.tolist())
+
+    mse_test = df_copy_test.mse.values
+    mse_test_data = np.column_stack((range(len(mse_test)), mse_test))
+    y_test_ = df_copy_test.labels.values
+    print(",,,, ", mse_test_data.shape, type(mse_test_data))
+    print("---- ", len(y_test_), type(y_test_.tolist()), y_test_.tolist())
+
+    return mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_
 
 
 if __name__ == "__main__":
@@ -479,7 +612,7 @@ if __name__ == "__main__":
     # Train the model
     history = vae.fit(
         train_x, train_x,
-        epochs=1,
+        epochs=2,
         batch_size=10,
         validation_data=(val_x, val_x),
         shuffle=True
@@ -494,7 +627,7 @@ if __name__ == "__main__":
     ax.set_xlabel('Epoch')
     ax.set_ylabel("Loss")
     ax.legend(loc='upper right')
-    # plt.show()
+    plt.show()
 
     # plot_label_clusters(vae.encoder, train_x, train_y)
 
@@ -502,91 +635,13 @@ if __name__ == "__main__":
     # Test the mode
     encoded_inputs = vae.encoder.predict(test_x)
     reconstructions = vae.decoder.predict(encoded_inputs)
-    # print("reconstructions and train_x shapes : ", reconstructions.shape, test_x.shape) # (3006, 64) both
-    # print("reconstruction sample[0]: ", reconstructions[0])
-    # print("test_x sample[0]: ", test_x[0])
-    # print("test_y sample[0]: ", test_y[0])
-    # print("test_x sample[102]: ", test_x[102])
-    # print("test_y sample[102]: ", test_y[102])
-    # print(type(reconstructions), type(test_x))
-    # print(type(reconstructions[0]), type(test_x[0]))
+
     train_val_x = np.concatenate((train_x, val_x), axis=0)
     encoded_inputs = vae.encoder.predict(train_val_x)
     reconstructions_train_val = vae.decoder.predict(encoded_inputs)
+
     mse_train_val = np.mean(np.power(train_val_x - reconstructions_train_val, 2), axis=1)
     mse_test = np.mean(np.power(test_x - reconstructions, 2), axis=1)
-    # mse_test_data = np.column_stack((range(len(mse_test)), mse_test))
-    # mse_train_data = np.column_stack((range(len(mse_train)), mse_train))
-
-    mse_all = np.concatenate((mse_train_val, mse_test), axis=0)
-    mse_all_data = np.column_stack((range(len(mse_all)), mse_all))
-    y_train_val = np.concatenate((train_y, val_y), axis=0)
-    y_all = np.concatenate((y_train_val, test_y), axis=0)
-    for i in range(len(y_all)):
-        if (y_all[i] == 1):
-            print("i = ", i ," is label ", y_all[i])
-
-    print("mse_all shape: ", mse_all_data.shape)
-    print("y_all len: ", len(y_all))
-
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
-    cm_bright = ListedColormap(['#FF0000', '#0000FF'])
-    ax.scatter(mse_all_data[:, 0], mse_all_data[:, 1], c=y_all, cmap=cm_bright, alpha=0.6)
-    plt.title("2D plot MSE points grouped by class")
-    # plt.show()
-
-
-    # scatter's x & y
-    clean_x, clean_y = mse_all_data[y_all == 0][:, 0], mse_all_data[y_all == 0][:, 1]
-    fraud_x, fraud_y = mse_all_data[y_all == 1][:, 0], mse_all_data[y_all == 1][:, 1]
-    print("clean x,y : ", clean_x, clean_y)
-    print("fraud x,y : ", fraud_x, fraud_y)
-
-    # scatter's x & y
-
-    # clean = mse_all_data[y_all == 0][:,:]
-    # clean_y = y_all[y_all == 0]
-    # fraud = mse_all_data[y_all == 1][:,:]
-    # fraud_y = y_all[y_all == 1]
-    # print("clean x,y : ", type(clean), clean.shape)
-    # print("fraud x,y : ", type(fraud), fraud.shape)
-    # print(clean_y, len(clean_y))
-    # print(fraud_y, len(fraud_y))
-    # num_train = int(0.7 * clean.shape[0])
-    # _mse_train_ =
-    _df = pd.DataFrame({'mse': mse_all, 'labels': y_all})
-    fraud = _df[_df.labels == 1]
-    clean = _df[_df.labels == 0]
-
-
-    num_train = int(0.6 * clean.shape[0])
-
-    partition_idx = len(fraud.index) / 2
-    print(len(fraud.index))
-    df_fraud_train = fraud.iloc[0:int(partition_idx), :]
-    print("debug : ", len(df_fraud_train.index))
-    df_copy_train = pd.concat([clean.iloc[0:num_train], df_fraud_train])
-
-    print(df_copy_train.shape)
-    df_copy_test = pd.concat([clean.iloc[num_train:], fraud])
-    print("XENIA 1 \n", df_copy_train.shape)
-    print("XENIA 2 \n", df_copy_test.shape)
-    # clf = RandomForestClassifier(max_depth=4, n_estimators=20)
-    mse_train = df_copy_train.mse.values
-    mse_train_data = np.column_stack((range(len(mse_train)), mse_train))
-    y_train_ = df_copy_train.labels.values
-    print(",,,, ", mse_train_data.shape, type(mse_train_data))
-    print("---- ", len(y_train_), type(y_train_.tolist()), y_train_.tolist())
-    # for i in range(len(y_train_.tolist())):
-    #     print(i, " ", (y_train_.tolist())[(i)])
-
-    mse_test = df_copy_test.mse.values
-    mse_test_data = np.column_stack((range(len(mse_test)), mse_test))
-    y_test_ = df_copy_test.labels.values
-    print(",,,, ", mse_test_data.shape, type(mse_test_data))
-    print("---- ", len(y_test_), type(y_test_.tolist()), y_test_.tolist())
-    for i in range(len(y_test_.tolist())):
-        print(i, " ", (y_test_.tolist())[(i)])
 
     # Train the model using the training set
     # clf.fit(mse_all_data, )
@@ -597,83 +652,11 @@ if __name__ == "__main__":
     # # Model Accuracy, how often is the classifier correct?
     # print("RandomForest classifier's Accuracy: ", metrics.accuracy_score(test_y, y_pred))
 
+    mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_ = \
+                            splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y)
     # Plot decision boundary
-    plot_decision_boundary(mse_all_data, y_all)
-    plot_decision_boundary_2(mse_train_data, y_train_, mse_test_data, y_test_)
-    # plot_decision_surfaces(mse_test_data, test_y, mse_train_data, train_y)
+    # plot_decision_boundary(mse_all_data, y_all)
+    # plot_decision_boundary_2(mse_train_data, y_train_, mse_test_data, y_test_)
+    check_overfitting(mse_train_data, y_train_, mse_test_data, y_test_)
 
-    exit(0)
-
-
-
-
-    # calculating the mean squared error reconstruction loss per row in the numpy array
-    mse = np.mean(np.power(test_x - reconstructions, 2), axis=1)
-
-    # showing the reconstruction losses for a subsample of transactions
-    # print(f'Mean Squared Error reconstruction losses')
-    # print(mse)
-
-    sorted_index_array = np.argsort(mse)
-
-    # sorted array
-    sorted_array = mse[sorted_index_array]
-
-    # we want 3 largest value
-    rslt = sorted_array[-10:]
-
-    # show the output
-    print("{} largest value:".format(10),
-          rslt)
-
-    # adjust this parameter to customise the recall/precision trade-off
-    Z_SCORE_THRESHOLD = 33
-
-    # find the outliers on our reconstructions' mean squared errors
-    mad_z_scores, threshold_value = vae.detect_mad_outliers(mse, threshold=Z_SCORE_THRESHOLD)
-    mad_outliers = (mad_z_scores > Z_SCORE_THRESHOLD).astype(int)
-    print("mad outliers of our reconstructions' MSE: ", mad_outliers)
-
-    anomalies = len(mad_outliers[mad_outliers == True])
-    total_trades = len(test_y)
-    d = (anomalies / total_trades * 100)
-
-    print("MAD Z-score > ", Z_SCORE_THRESHOLD, " is the selected threshold.")
-    print("Any trade with a MSRE >= ", threshold_value, " is flagged.")
-    print("This results in", anomalies, "detected anomalies, or ", d, "% out of ", total_trades, "trades reported")
-
-    data = np.column_stack((range(len(mse)), mse))
-    print("data =", data)
-    # scatter's x & y
-    clean_x, clean_y = data[test_y == 0][:, 0], data[test_y == 0][:, 1]
-    fraud_x, fraud_y = data[test_y == 1][:, 0], data[test_y == 1][:, 1]
-    print("clean x,y : ", clean_x, clean_y)
-    print("fraud x,y : ", fraud_x, fraud_y)
-
-    # instantiate new figure
-    fig, ax = plt.subplots(figsize=(15, 8))
-
-    # plot reconstruction errors
-    ax.scatter(clean_x, clean_y, s=20, color='g', alpha=0.6, label='Clean')
-    ax.scatter(fraud_x, fraud_y, s=30, color='r', alpha=1, label='Fraud')
-
-    # MAD threshold line
-    ax.plot([threshold_value for i in range(len(mse))], color='orange', linewidth=1.5,
-            label='MAD threshold')
-
-    # change scale to log & limit x-axis range
-    ax.set_yscale('log')
-    ax.set_xlim(0, (len(mse) + 100))
-
-    # title & labels
-    fig.suptitle('Mean Squared Reconstruction Errors & MAD Threshold', fontsize=14)
-    ax.set_xlabel('Pseudo Message ID\n(Index in MSE List)')
-    ax.set_ylabel('Mean Squared Error\n(Log Scale)')
-
-    # orange legend for threshold value
-    ax.legend(loc='lower left', prop={'size': 9})
-
-    # display
-    fig.show()
-    plt.show()
 
