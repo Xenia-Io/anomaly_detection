@@ -38,11 +38,12 @@ class Sampling(layers.Layer):
         return z_mean + tf.exp(0.5 * z_log_var) * epsilon
 
 class VAE(tf.keras.Model):
-    def __init__(self, epsilon_std=1, timesteps = 1, epochs= 1, latent_dim = 32, intermediate_dim = 96, \
-                 optimizer='adam', loss='mae', batch_size=1, kernel_init=0, gamma=0, epsilon=0, \
-                 w_decay=0, momentum=0, dropout=0, embed_size = 300, max_features = 10000, maxlen = 64, **kwargs):
+    def __init__(self, pretrained_weights, emdedding_size, vocab_size, epsilon_std=1, timesteps = 1, epochs= 1, \
+                 optimizer='adam', loss='mae', batch_size=1, kernel_init=0, gamma=0, epsilon=0, latent_dim = 32, \
+                 w_decay=0, momentum=0, dropout=0, embed_size = 300, max_features = 10000, intermediate_dim = 96,\
+                 maxlen = 64, **kwargs):
         super(VAE, self).__init__(**kwargs)
-        self.optimizer = optimizer
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.1)
         self.batch_size = batch_size
         self.epochs = epochs
         self.loss = loss
@@ -59,14 +60,16 @@ class VAE(tf.keras.Model):
         self.intermediate_dim = intermediate_dim  # output shape of LSTM
         self.latent_dim = latent_dim  # latent z-layer shape
         self.epsilon_std = epsilon_std  # z-layer sigma
-        self.emdedding_size = 200  # z-layer sigma
+        self.emdedding_size = emdedding_size  # z-layer sigma
+        self.pretrained_weights = pretrained_weights
+        self.vocab_size = vocab_size
 
         self.encoder, self.decoder = self.build_encoder_decoder()
 
 
     def build_encoder_decoder(self):
-        x = Input(batch_shape=(None, emdedding_size))
-        x_embed = Embedding(input_dim=vocab_size, output_dim=emdedding_size, weights=[pretrained_weights],
+        x = Input(batch_shape=(None, self.emdedding_size))
+        x_embed = Embedding(input_dim=self.vocab_size, output_dim=self.emdedding_size, weights=[self.pretrained_weights],
                             trainable=False)(x)
         print("x_embed: ", x_embed)
 
@@ -82,9 +85,9 @@ class VAE(tf.keras.Model):
 
         # build a generator that can sample sentences from the learned distribution
         # we instantiate these layers separately so as to reuse them later
-        repeated_context = RepeatVector(emdedding_size)
+        repeated_context = RepeatVector(self.emdedding_size)
         decoder_h = LSTM(self.intermediate_dim, return_sequences=True, recurrent_dropout=0.2)
-        decoder_mean = Dense(emdedding_size, activation='linear', name='decoder_mean')
+        decoder_mean = Dense(self.emdedding_size, activation='linear', name='decoder_mean')
         h_decoded = decoder_h(repeated_context(z))
         x_decoded_mean = decoder_mean(h_decoded)
 
@@ -93,7 +96,7 @@ class VAE(tf.keras.Model):
         _x_decoded_mean = decoder_mean(_h_decoded)
         _x_decoded_mean = Activation('relu', name="relu")(_x_decoded_mean)
         _x_decoded_out = Reshape((4096,))(_x_decoded_mean)
-        _x_decoded_out = Dense(emdedding_size, activation='linear', name='decoder_out')(_x_decoded_out)
+        _x_decoded_out = Dense(self.emdedding_size, activation='linear', name='decoder_out')(_x_decoded_out)
         decoder = Model(decoder_input, _x_decoded_out, name="decoder")
 
         decoder.summary()
@@ -601,8 +604,8 @@ if __name__ == "__main__":
                     val_y, test_x, test_y= prepare_data(preprocessor, df_copy, w2v_model)
 
 
-    vae = VAE()
-    vae.compile(optimizer= 'sgd')
+    vae = VAE(pretrained_weights, emdedding_size, vocab_size)
+    vae.compile(optimizer= 'adam')
     # vae.summary()
 
     # Visualization
