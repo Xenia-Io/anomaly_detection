@@ -185,21 +185,45 @@ class VAE(tf.keras.Model):
     def idx2word(self, word_model, idx):
         return word_model.wv.index2word[idx]
 
+def plot_SVM(mse_all_data, y_all):
+    # fit the model, don't regularize for illustration purposes
+    clf = svm.SVC(kernel='linear', C=1)
+    clf.fit(mse_all_data, y_all)
+    plt.scatter(mse_all_data[:, 0], mse_all_data[:, 1], c=y_all, s=30, cmap=plt.cm.Paired)
+    # plot the decision function
+    ax = plt.gca()
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    # create grid to evaluate model
+    xx = np.linspace(xlim[0], xlim[1], 30)
+    yy = np.linspace(ylim[0], ylim[1], 30)
+    YY, XX = np.meshgrid(yy, xx)
+    xy = np.vstack([XX.ravel(), YY.ravel()]).T
+    Z = clf.decision_function(xy).reshape(XX.shape)
+    # plot decision boundary and margins
+    ax.contour(XX, YY, Z, colors='k', levels=[-1, 0, 1], alpha=0.5,
+               linestyles=['--', '-', '--'])
+    # plot support vectors
+    ax.scatter(clf.support_vectors_[:, 0], clf.support_vectors_[:, 1], s=100,
+               linewidth=1, facecolors='none')
+    plt.show()
 
-def plot_decision_boundary_SVM(mse_train_data, y_train_, mse_test_data, y_test_):
-    h = .02  # step size in the mesh
+
+def plot_decision_boundary_SVM(mse_data, y_):
+    h = 10.0  # step size in the mesh
 
     # we create an instance of SVM and fit out data. We do not scale our
     # data since we want to plot the support vectors
     C = 1.0  # SVM regularization parameter
-    svc = svm.SVC(kernel='linear', C=C).fit(mse_train_data, y_train_)
-    rbf_svc = svm.SVC(kernel='rbf', gamma=0.7, C=C).fit(mse_train_data, y_train_)
-    poly_svc = svm.SVC(kernel='poly', degree=3, C=C).fit(mse_train_data, y_train_)
-    lin_svc = svm.LinearSVC(C=C).fit(mse_train_data, y_train_)
+    svc = svm.SVC(kernel='linear', C=C).fit(mse_data, y_)
+    rbf_svc = svm.SVC(kernel='rbf', gamma=0.7, C=C).fit(mse_data, y_)
+    poly_svc = svm.SVC(kernel='poly', degree=3, C=C).fit(mse_data, y_)
+    lin_svc = svm.LinearSVC(C=C).fit(mse_data, y_)
 
     # create a mesh to plot in
-    x_min, x_max = mse_test_data[:, 0].min() - 1, mse_test_data[:, 0].max() + 1
-    y_min, y_max = mse_test_data[:, 1].min() - 1, mse_test_data[:, 1].max() + 1
+    # n= int(mse_test_data.shape[0]/2)
+    x_min, x_max = mse_data[:, 0].min() - 1, mse_data[:, 0].max() + 200
+    y_min, y_max = mse_data[:, 1].min() - 1, mse_data[:, 1].max() + 200
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
                          np.arange(y_min, y_max, h))
 
@@ -222,9 +246,9 @@ def plot_decision_boundary_SVM(mse_train_data, y_train_, mse_test_data, y_test_)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
 
         # Plot also the training points
-        plt.scatter(mse_test_data[:, 0], mse_test_data[:, 1], c=y_test_, cmap=plt.cm.coolwarm)
-        plt.xlabel('Sepal length')
-        plt.ylabel('Sepal width')
+        plt.scatter(mse_data[:, 0], mse_data[:, 1], c=y_, cmap=plt.cm.coolwarm)
+        plt.xlabel('samples')
+        plt.ylabel('mse')
         plt.xlim(xx.min(), xx.max())
         plt.ylim(yy.min(), yy.max())
         plt.xticks(())
@@ -561,22 +585,22 @@ if __name__ == "__main__":
     # Train the model
     history = vae.fit(
         train_x, train_x,
-        epochs=4,
-        batch_size=100,
+        epochs=1,
+        batch_size=300,
         validation_data=(val_x, val_x),
         shuffle=True
     ).history
 
-    # Plot the training and validation loss
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
-    ax.plot(history['loss'], 'b', label='train_loss', linewidth=2)
-    ax.plot(history['val_loss'], 'r', label='val_loss', linewidth=2)
-    # ax.plot(history['kl_loss'], 'g', label='kl_loss', linewidth=2)
-    # ax.plot(history['reconstruction_loss'], 'o', color='green',  label=' reconstruction loss', linewidth=2)
-    ax.set_xlabel('Epoch')
-    ax.set_ylabel("Loss")
-    ax.legend(loc='upper right')
-    plt.show()
+    # # Plot the training and validation loss
+    # fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
+    # ax.plot(history['loss'], 'b', label='train_loss', linewidth=2)
+    # ax.plot(history['val_loss'], 'r', label='val_loss', linewidth=2)
+    # # ax.plot(history['kl_loss'], 'g', label='kl_loss', linewidth=2)
+    # # ax.plot(history['reconstruction_loss'], 'o', color='green',  label=' reconstruction loss', linewidth=2)
+    # ax.set_xlabel('Epoch')
+    # ax.set_ylabel("Loss")
+    # ax.legend(loc='upper right')
+    # plt.show()
 
     # plot_label_clusters(vae.encoder, train_x, train_y)
 
@@ -604,8 +628,9 @@ if __name__ == "__main__":
     mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_ = \
                             splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y)
     # Plot decision boundary
-    plot_decision_boundary_SVM(mse_train_data, y_train_, mse_test_data, y_test_)
-    plot_decision_boundary(mse_train_data, y_train_, mse_test_data, y_test_)
-    check_overfitting(mse_train_data, y_train_, mse_test_data, y_test_)
+    plot_SVM(mse_all_data, y_all)
+    plot_decision_boundary_SVM(mse_all_data, y_all)
+    # plot_decision_boundary(mse_train_data, y_train_, mse_test_data, y_test_)
+    # check_overfitting(mse_train_data, y_train_, mse_test_data, y_test_)
 
 
