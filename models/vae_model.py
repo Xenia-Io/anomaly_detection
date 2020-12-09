@@ -14,7 +14,7 @@ import tensorflow.keras.losses as tf_losses
 import tensorflow.keras.backend as bck
 import tensorflow_probability as tfp
 from kerastuner import HyperModel
-from sklearn import metrics
+from sklearn import metrics, svm
 import kerastuner as kt
 import tensorflow as tf
 from utils import *
@@ -186,111 +186,55 @@ class VAE(tf.keras.Model):
         return word_model.wv.index2word[idx]
 
 
-def plot_decision_boundary(mse_data, y):
-    # Parameters
-    n_estimators = 20
-    cmap = plt.cm.RdYlBu
-    plot_step = 0.02  # fine step width for decision surface contours
-    plot_step_coarser = 0.5  # step widths for coarse classifier guesses
-    RANDOM_SEED = 13  # fix the seed on each iteration
+def plot_decision_boundary_SVM(mse_train_data, y_train_, mse_test_data, y_test_):
+    h = .02  # step size in the mesh
 
-    plot_idx = 1
+    # we create an instance of SVM and fit out data. We do not scale our
+    # data since we want to plot the support vectors
+    C = 1.0  # SVM regularization parameter
+    svc = svm.SVC(kernel='linear', C=C).fit(mse_train_data, y_train_)
+    rbf_svc = svm.SVC(kernel='rbf', gamma=0.7, C=C).fit(mse_train_data, y_train_)
+    poly_svc = svm.SVC(kernel='poly', degree=3, C=C).fit(mse_train_data, y_train_)
+    lin_svc = svm.LinearSVC(C=C).fit(mse_train_data, y_train_)
 
-    models = [DecisionTreeClassifier(max_depth=None),
-              RandomForestClassifier(n_estimators=n_estimators),
-              ExtraTreesClassifier(n_estimators=n_estimators),
-              AdaBoostClassifier(DecisionTreeClassifier(max_depth=3),
-                                 n_estimators=n_estimators)]
+    # create a mesh to plot in
+    x_min, x_max = mse_test_data[:, 0].min() - 1, mse_test_data[:, 0].max() + 1
+    y_min, y_max = mse_test_data[:, 1].min() - 1, mse_test_data[:, 1].max() + 1
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                         np.arange(y_min, y_max, h))
 
-    for model in models:
+    # title for the plots
+    titles = ['SVC with linear kernel',
+              'LinearSVC (linear kernel)',
+              'SVC with RBF kernel',
+              'SVC with polynomial (degree 3) kernel']
 
-        # Shuffle
-        idx = np.arange(mse_data.shape[0])
-        np.random.seed(RANDOM_SEED)
-        np.random.shuffle(idx)
-        X = mse_data[idx]
-        y = y[idx]
+    for i, clf in enumerate((svc, lin_svc, rbf_svc, poly_svc)):
+        # Plot the decision boundary. For that, we will assign a color to each
+        # point in the mesh [x_min, x_max]x[y_min, y_max].
+        plt.subplot(2, 2, i + 1)
+        plt.subplots_adjust(wspace=0.4, hspace=0.4)
 
-        # Standardize
-        mean = X.mean(axis=0)
-        std = X.std(axis=0)
-        X = (X - mean) / std
+        Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
 
-        # Train
-        model.fit(X, y)
+        # Put the result into a color plot
+        Z = Z.reshape(xx.shape)
+        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
 
-        scores = model.score(X, y)
-        # Create a title for each column and the console by using str() and
-        # slicing away useless parts of the string
-        model_title = str(type(model)).split(
-            ".")[-1][:-2][:-len("Classifier")]
+        # Plot also the training points
+        plt.scatter(mse_test_data[:, 0], mse_test_data[:, 1], c=y_test_, cmap=plt.cm.coolwarm)
+        plt.xlabel('Sepal length')
+        plt.ylabel('Sepal width')
+        plt.xlim(xx.min(), xx.max())
+        plt.ylim(yy.min(), yy.max())
+        plt.xticks(())
+        plt.yticks(())
+        plt.title(titles[i])
 
-        model_details = model_title
-        if hasattr(model, "estimators_"):
-            model_details += " with {} estimators".format(
-                len(model.estimators_))
-        print(model_details, " has a score of ", scores)
-
-        plt.subplot(2, 2, plot_idx)
-
-        if plot_idx <= len(models):
-            # Add a title at the top of each column
-            plt.title(model_title, fontsize=9)
-
-        # Now plot the decision boundary using a fine mesh as input to a
-        # filled contour plot
-        x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
-        y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
-        xx, yy = np.meshgrid(np.arange(x_min, x_max, plot_step),
-                             np.arange(y_min, y_max, plot_step))
-
-        # Plot either a single DecisionTreeClassifier or alpha blend the
-        # decision surfaces of the ensemble of classifiers
-        if isinstance(model, DecisionTreeClassifier):
-            Z = model.predict(np.c_[xx.ravel(), yy.ravel()])
-            Z = Z.reshape(xx.shape)
-            cs = plt.contourf(xx, yy, Z, cmap=cmap)
-        else:
-            # Choose alpha blend level with respect to the number
-            # of estimators
-            # that are in use (noting that AdaBoost can use fewer estimators
-            # than its maximum if it achieves a good enough fit early on)
-            estimator_alpha = 1.0 / len(model.estimators_)
-            for tree in model.estimators_:
-                Z = tree.predict(np.c_[xx.ravel(), yy.ravel()])
-                Z = Z.reshape(xx.shape)
-                cs = plt.contourf(xx, yy, Z, alpha=estimator_alpha, cmap=cmap)
-
-        # Build a coarser grid to plot a set of ensemble classifications
-        # to show how these are different to what we see in the decision
-        # surfaces. These points are regularly space and do not have a
-        # black outline
-        xx_coarser, yy_coarser = np.meshgrid(
-            np.arange(x_min, x_max, plot_step_coarser),
-            np.arange(y_min, y_max, plot_step_coarser))
-        Z_points_coarser = model.predict(np.c_[xx_coarser.ravel(),
-                                               yy_coarser.ravel()]
-                                         ).reshape(xx_coarser.shape)
-
-        cs_points = plt.scatter(xx_coarser, yy_coarser, s=15,
-                                c=Z_points_coarser, cmap=cmap,
-                                edgecolors="none")
-
-
-        # Plot the training points, these are clustered together and have a
-        # black outline
-        plt.scatter(X[:, 0], X[:, 1], c=y,
-                    cmap=ListedColormap(['r', 'b']),
-                    edgecolor='k', s=20)
-        plot_idx += 1  # move on to the next plot in sequence
-
-    plt.suptitle("Decision surfaces for different classifiers", fontsize=12)
-    plt.axis("tight")
-    plt.tight_layout(h_pad=0.2, w_pad=0.2, pad=2.5)
     plt.show()
 
 
-def plot_decision_boundary_2(mse_train_data, y_train_, mse_test_data, y_test_):
+def plot_decision_boundary(mse_train_data, y_train_, mse_test_data, y_test_):
     # Parameters
     n_estimators = 20
     cmap = plt.cm.RdYlBu
@@ -300,7 +244,7 @@ def plot_decision_boundary_2(mse_train_data, y_train_, mse_test_data, y_test_):
 
     plot_idx = 1
 
-    models = [DecisionTreeClassifier(max_depth=None),
+    models = [DecisionTreeClassifier(max_depth=3),
               RandomForestClassifier(n_estimators=n_estimators),
               ExtraTreesClassifier(n_estimators=n_estimators),
               AdaBoostClassifier(DecisionTreeClassifier(max_depth=3),
@@ -352,8 +296,8 @@ def plot_decision_boundary_2(mse_train_data, y_train_, mse_test_data, y_test_):
 
         # Now plot the decision boundary using a fine mesh as input to a
         # filled contour plot
-        x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
-        y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+        x_min, x_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+        y_min, y_max = X[:, 0].min() - 1, X[:, 0].max() + 1
         xx, yy = np.meshgrid(np.arange(x_min, x_max, plot_step),
                              np.arange(y_min, y_max, plot_step))
 
@@ -392,7 +336,7 @@ def plot_decision_boundary_2(mse_train_data, y_train_, mse_test_data, y_test_):
 
         # Plot the training points, these are clustered together and have a
         # black outline
-        plt.scatter(X[:, 0], X[:, 1], c=y,
+        plt.scatter(X[:, 1], X[:, 0], c=y,
                     cmap=ListedColormap(['r', 'b']),
                     edgecolor='k', s=20)
         plot_idx += 1  # move on to the next plot in sequence
@@ -417,13 +361,13 @@ def check_overfitting(mse_train_data, y_train_, mse_test_data, y_test_):
 
     plot_idx = 1
     tree_maxdepth = 3
-    tree_overfitting_maxdepth = 100
+    tree_overfitting_maxdepth = 500
     trees = RandomForestClassifier(max_depth=tree_maxdepth,
                                    n_estimators=10,
                                    random_state=0)
 
     trees_overfit = RandomForestClassifier(max_depth=tree_overfitting_maxdepth,
-                                           n_estimators=50,
+                                           n_estimators=100,
                                            random_state=0)
 
     # Shuffle
@@ -536,8 +480,10 @@ def splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y):
 
     fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
     cm_bright = ListedColormap(['#FF0000', '#0000FF'])
-    ax.scatter(mse_all_data[:, 0], mse_all_data[:, 1], c=y_all, cmap=cm_bright, alpha=0.6)
-    plt.title("2D plot MSE points grouped by class")
+    ax.scatter(mse_all_data[:, 1], mse_all_data[:, 0], c=y_all, cmap=cm_bright, alpha=0.6)
+    ax.set_xlabel("MSE values")
+    ax.set_ylabel("Samples")
+    plt.title("2D plot MSE values grouped by class for each sample")
     plt.show()
 
     # scatter's x & y
@@ -615,8 +561,8 @@ if __name__ == "__main__":
     # Train the model
     history = vae.fit(
         train_x, train_x,
-        epochs=2,
-        batch_size=10,
+        epochs=4,
+        batch_size=100,
         validation_data=(val_x, val_x),
         shuffle=True
     ).history
@@ -625,8 +571,8 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
     ax.plot(history['loss'], 'b', label='train_loss', linewidth=2)
     ax.plot(history['val_loss'], 'r', label='val_loss', linewidth=2)
-    ax.plot(history['kl_loss'], 'g', label='kl_loss', linewidth=2)
-    ax.plot(history['reconstruction_loss'], 'o', color='green',  label=' reconstruction loss', linewidth=2)
+    # ax.plot(history['kl_loss'], 'g', label='kl_loss', linewidth=2)
+    # ax.plot(history['reconstruction_loss'], 'o', color='green',  label=' reconstruction loss', linewidth=2)
     ax.set_xlabel('Epoch')
     ax.set_ylabel("Loss")
     ax.legend(loc='upper right')
@@ -635,7 +581,7 @@ if __name__ == "__main__":
     # plot_label_clusters(vae.encoder, train_x, train_y)
 
 
-    # Test the mode
+    # Test the model
     encoded_inputs = vae.encoder.predict(test_x)
     reconstructions = vae.decoder.predict(encoded_inputs)
 
@@ -658,8 +604,8 @@ if __name__ == "__main__":
     mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_ = \
                             splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y)
     # Plot decision boundary
-    # plot_decision_boundary(mse_all_data, y_all)
-    # plot_decision_boundary_2(mse_train_data, y_train_, mse_test_data, y_test_)
+    plot_decision_boundary_SVM(mse_train_data, y_train_, mse_test_data, y_test_)
+    plot_decision_boundary(mse_train_data, y_train_, mse_test_data, y_test_)
     check_overfitting(mse_train_data, y_train_, mse_test_data, y_test_)
 
 
