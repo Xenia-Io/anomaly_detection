@@ -186,6 +186,7 @@ class VAE(tf.keras.Model):
     def idx2word(self, word_model, idx):
         return word_model.wv.index2word[idx]
 
+
 def plot_SVM_unbalanced(X, y):
     # fit the model and get the separating hyperplane
     clf = svm.SVC(kernel='linear', C=1.0)
@@ -226,12 +227,21 @@ def plot_SVM_unbalanced(X, y):
     plt.show()
 
 
-
-def plot_SVM(mse_all_data, y_all):
+def plot_SVM(mse_all_data, y_all, weighted = True):
     # fit the model, don't regularize for illustration purposes
     clf = svm.SVC(kernel='linear', C=1)
-    clf.fit(mse_all_data, y_all)
-    plt.scatter(mse_all_data[:, 0], mse_all_data[:, 1], c=y_all, s=30, cmap=plt.cm.Paired)
+
+    if weighted:
+        sample_weight = abs(np.ones(len(mse_all_data)))
+        # and bigger weights to some anomalies
+        sample_weight[y_all == 1] *= 5
+        clf.fit(mse_all_data, y_all, sample_weight=sample_weight)
+        plt.scatter(mse_all_data[:, 0], mse_all_data[:, 1], c=y_all, s=30 * sample_weight, cmap=plt.cm.Paired)
+
+    else:
+        clf.fit(mse_all_data, y_all)
+        plt.scatter(mse_all_data[:, 0], mse_all_data[:, 1], c=y_all, s=30, cmap=plt.cm.Paired)
+
     # plot the decision function
     ax = plt.gca()
     xlim = ax.get_xlim()
@@ -684,10 +694,11 @@ if __name__ == "__main__":
 
     mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_ = \
                             splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y)
+
     # Plot decision boundary
-    plot_SVM_unbalanced(mse_all_data, y_all)
+    # plot_SVM_unbalanced(mse_all_data, y_all)
     plot_SVM(mse_all_data, y_all)
-    plot_decision_boundary_SVM(mse_all_data, y_all)
+    # plot_decision_boundary_SVM(mse_all_data, y_all)
     # plot_decision_boundary(mse_train_data, y_train_, mse_test_data, y_test_)
     # check_overfitting(mse_train_data, y_train_, mse_test_data, y_test_)
 
