@@ -11,6 +11,7 @@ from tensorflow.keras import layers, regularizers
 from tensorflow.keras.optimizers import SGD
 from kerastuner.tuners import RandomSearch
 import tensorflow.keras.losses as tf_losses
+from sklearn.metrics import accuracy_score
 import tensorflow.keras.backend as bck
 import tensorflow_probability as tfp
 from kerastuner import HyperModel
@@ -185,6 +186,47 @@ class VAE(tf.keras.Model):
     def idx2word(self, word_model, idx):
         return word_model.wv.index2word[idx]
 
+def plot_SVM_unbalanced(X, y):
+    # fit the model and get the separating hyperplane
+    clf = svm.SVC(kernel='linear', C=1.0)
+    clf.fit(X, y)
+
+    # fit the model and get the separating hyperplane using weighted classes
+    wclf = svm.SVC(kernel='linear', class_weight={1: 100})
+    wclf.fit(X, y)
+
+    # plot the samples
+    plt.scatter(X[:, 0], X[:, 1], c=y, cmap=plt.cm.Paired, edgecolors='k')
+
+    # plot the decision functions for both classifiers
+    ax = plt.gca()
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+
+    # create grid to evaluate model
+    xx = np.linspace(xlim[0], xlim[1], 30)
+    yy = np.linspace(ylim[0], ylim[1], 30)
+    YY, XX = np.meshgrid(yy, xx)
+    xy = np.vstack([XX.ravel(), YY.ravel()]).T
+
+    # get the separating hyperplane
+    Z = clf.decision_function(xy).reshape(XX.shape)
+
+    # plot decision boundary and margins
+    a = ax.contour(XX, YY, Z, colors='k', levels=[0], alpha=0.5, linestyles=['-'])
+
+    # get the separating hyperplane for weighted classes
+    Z = wclf.decision_function(xy).reshape(XX.shape)
+
+    # plot decision boundary and margins for weighted classes
+    b = ax.contour(XX, YY, Z, colors='r', levels=[0], alpha=0.5, linestyles=['-'])
+
+    plt.legend([a.collections[0], b.collections[0]], ["non weighted", "weighted"],
+               loc="upper right")
+    plt.show()
+
+
+
 def plot_SVM(mse_all_data, y_all):
     # fit the model, don't regularize for illustration purposes
     clf = svm.SVC(kernel='linear', C=1)
@@ -200,6 +242,7 @@ def plot_SVM(mse_all_data, y_all):
     YY, XX = np.meshgrid(yy, xx)
     xy = np.vstack([XX.ravel(), YY.ravel()]).T
     Z = clf.decision_function(xy).reshape(XX.shape)
+
     # plot decision boundary and margins
     ax.contour(XX, YY, Z, colors='k', levels=[-1, 0, 1], alpha=0.5,
                linestyles=['--', '-', '--'])
@@ -239,7 +282,18 @@ def plot_decision_boundary_SVM(mse_data, y_):
         plt.subplot(2, 2, i + 1)
         plt.subplots_adjust(wspace=0.4, hspace=0.4)
 
+        scores = clf.score(mse_data, y_)
+        if i ==0:
+            print("SVC with linear kernel has a score of ", scores)
+        elif i == 1:
+            print("LinearSVC (linear kernel) has a score of ", scores)
+        elif i == 2:
+            print("SVC with RBF kernel has a score of ", scores)
+        else:
+            print("SVC with polynomial (degree 3) kernel has a score of ", scores)
+
         Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
+        # print(accuracy_score(y_true, Z))
 
         # Put the result into a color plot
         Z = Z.reshape(xx.shape)
@@ -255,6 +309,9 @@ def plot_decision_boundary_SVM(mse_data, y_):
         plt.yticks(())
         plt.title(titles[i])
 
+    plt.suptitle("Decision surfaces for different classifiers", fontsize=12)
+    plt.axis("tight")
+    plt.tight_layout(h_pad=0.2, w_pad=0.2, pad=2.5)
     plt.show()
 
 
@@ -530,20 +587,20 @@ def splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y):
 
     print(df_copy_train.shape)
     df_copy_test = pd.concat([clean.iloc[num_train:], fraud])
-    print("XENIA 1 \n", df_copy_train.shape)
-    print("XENIA 2 \n", df_copy_test.shape)
+    print("df_copy_train.shape: ", df_copy_train.shape)
+    print("df_copy_test.shape: ", df_copy_test.shape)
 
     mse_train = df_copy_train.mse.values
     mse_train_data = np.column_stack((range(len(mse_train)), mse_train))
     y_train_ = df_copy_train.labels.values
-    print(",,,, ", mse_train_data.shape, type(mse_train_data))
-    print("---- ", len(y_train_), type(y_train_.tolist()), y_train_.tolist())
+    print("mse_train_data.shape: ", mse_train_data.shape, type(mse_train_data))
+    print("len(y_train_): ", len(y_train_), type(y_train_.tolist()), y_train_.tolist())
 
     mse_test = df_copy_test.mse.values
     mse_test_data = np.column_stack((range(len(mse_test)), mse_test))
     y_test_ = df_copy_test.labels.values
-    print(",,,, ", mse_test_data.shape, type(mse_test_data))
-    print("---- ", len(y_test_), type(y_test_.tolist()), y_test_.tolist())
+    print("mse_test_data.shape: ", mse_test_data.shape, type(mse_test_data))
+    print("len(y_test_): ", len(y_test_), type(y_test_.tolist()), y_test_.tolist())
 
     return mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_
 
@@ -628,6 +685,7 @@ if __name__ == "__main__":
     mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_ = \
                             splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y)
     # Plot decision boundary
+    plot_SVM_unbalanced(mse_all_data, y_all)
     plot_SVM(mse_all_data, y_all)
     plot_decision_boundary_SVM(mse_all_data, y_all)
     # plot_decision_boundary(mse_train_data, y_train_, mse_test_data, y_test_)
