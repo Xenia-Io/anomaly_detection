@@ -20,7 +20,7 @@ class Tester():
 
 
     def run_isoForest(self):
-        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize, dnn = False)
+        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
         preprocessor.preprocessing()
 
         print("x_all shape passed in iForest model: ", preprocessor.x_all.shape)
@@ -40,13 +40,13 @@ class Tester():
 
 
     def run_kMedians(self):
-        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize, dnn = False)
+        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
         preprocessor.preprocessing()
 
         print('Starting fitting K-Medians model', preprocessor.x_all.shape)
 
         # Use silhouette score
-        range_n_clusters = [2, 3, 4, 5, 6, 10, 18, 20, 30, 40, 50, 67]
+        range_n_clusters = [2, 3, 4, 5, 6, 10, 20, 30, 40, 50, 67]
         # range_n_clusters = [2,3,4,5,6]
         print("Number of clusters: ", range_n_clusters)
         print("Random sample 499 from x_all: ", preprocessor.x_all[499])
@@ -137,7 +137,7 @@ class Tester():
 
 
     def run_kMeans(self):
-        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize, dnn = False)
+        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
         preprocessor.preprocessing()
 
         print('Starting fitting K-Means model')
