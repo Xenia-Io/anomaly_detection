@@ -34,7 +34,7 @@ class Preprocessor():
             self.x_all_median = []
 
 
-    def preprocessing(self, printing=False):
+    def preprocessing(self, pca=False, tsne=False, umap=False, printing=False):
 
         feature_extractor = FeatureExtractor()
         self.x_all = feature_extractor.fit_transform(self.x_all, term_weighting='tf-idf')
@@ -53,8 +53,15 @@ class Preprocessor():
         # Apply dimensionality reduction
         scaler = StandardScaler()
         self.x_all = scaler.fit_transform(self.x_all)
+        self.x_train = scaler.fit_transform(self.x_train)
+        self.x_test = scaler.fit_transform(self.x_test)
+
         print("is supervised ? : " , self.supervised)
-        self.x_all = self.apply_Dim_Reduction(self.x_all, apply_pca=True, apply_tSNE=False, apply_umap=False)
+
+        if pca or tsne or umap:
+            self.x_all = self.apply_Dim_Reduction(self.x_all, apply_pca=pca, apply_tSNE=tsne, apply_umap=umap)
+            self.x_train = self.apply_Dim_Reduction(self.x_train, apply_pca=pca, apply_tSNE=tsne, apply_umap=umap)
+            self.x_test = self.apply_Dim_Reduction(self.x_test, apply_pca=pca, apply_tSNE=tsne, apply_umap=umap)
 
         # Visualization of the data
         if self.visualize:
@@ -256,11 +263,13 @@ class Preprocessor():
         elif apply_tSNE:
             print("Starting t-SNE Analysis...")
             X = TSNE(n_components=2).fit_transform(X)
-        else:
+        elif apply_umap:
             print("Starting UMAP Analysis...")
             X = UMAP(n_neighbors=15,
                       min_dist=0.1,
                       metric='correlation').fit_transform(X)
+        else:
+            print("You have not selected any method for dimensionality reduction..")
         return X
 
 

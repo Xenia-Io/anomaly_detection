@@ -3,10 +3,11 @@ from build_tests import Tester
 
 def main():
 
-    tester = Tester(10, 500, './data/big_dataset.json',is_supervised=False, visualize=True)
+    tester = Tester(10, 500, './data/big_dataset.json',is_supervised=False, visualize=False)
     # tester.run_isoForest()
+    tester.comparisons()
     # tester.run_kMeans()
-    tester.run_kMedians()
+    # tester.run_kMedians()
 
 
 

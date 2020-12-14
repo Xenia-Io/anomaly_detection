@@ -1,11 +1,16 @@
+from sklearn.metrics import roc_curve, precision_recall_curve, auc, silhouette_score, silhouette_samples
+from sklearn_extensions.fuzzy_kmeans import KMedians
+from sklearn.datasets import make_moons, make_blobs
+from sklearn.covariance import EllipticEnvelope
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.ensemble import IsolationForest
+from pre_processor import Preprocessor
+from sklearn.cluster import KMeans
 from feature_extractor import *
 import matplotlib.pyplot as plt
-from pre_processor import Preprocessor
-from sklearn.metrics import roc_curve, precision_recall_curve, auc, silhouette_score, silhouette_samples
-from sklearn.ensemble import IsolationForest
 import matplotlib.cm as cm
-from sklearn.cluster import KMeans
-from sklearn_extensions.fuzzy_kmeans import KMedians
+from sklearn import svm
+import time
 
 
 class Tester():
@@ -18,15 +23,94 @@ class Tester():
         self.is_supervised = is_supervised
         self.visualize = visualize
 
+    def comparisons(self):
+
+        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
+        preprocessor.preprocessing(pca=True)
+        print("x_all shape passed in: ", preprocessor.x_all.shape)
+
+        # Settings
+        n_samples = preprocessor.x_all.shape[0]
+        outliers_fraction = 0.15
+        n_outliers = int(outliers_fraction * n_samples)
+        n_inliers = n_samples - n_outliers
+
+        print('Starting fitting Models')
+
+        anomaly_algorithms = [
+            ("Robust covariance", EllipticEnvelope(contamination=outliers_fraction)),
+            ("One-Class SVM", svm.OneClassSVM(nu=outliers_fraction, kernel="rbf",
+                                              gamma=0.1)),
+            ("Isolation Forest", IsolationForest(contamination=outliers_fraction,
+                                                 random_state=42)),
+            ("Local Outlier Factor", LocalOutlierFactor(
+                n_neighbors=35, contamination=outliers_fraction))]
+
+        # Compare given classifiers under given settings
+        x_min, x_max = preprocessor.x_all[:, 1].min() - 1, preprocessor.x_all[:, 1].max() + 1
+        y_min, y_max = preprocessor.x_all[:, 0].min() - 1, preprocessor.x_all[:, 0].max() + 1
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),
+                             np.arange(y_min, y_max, 0.1))
+
+        plt.figure(figsize=(len(anomaly_algorithms) * 2 + 3, 12.5))
+        plt.subplots_adjust(left=.02, right=.98, bottom=.001, top=.96, wspace=.05,
+                            hspace=.01)
+
+        plot_num = 1
+        rng = np.random.RandomState(42)
+
+
+        # Add outliers
+        # X = np.concatenate([preprocessor.x_all, rng.uniform(low=-6, high=6,
+        #                                    size=(n_outliers, 2))], axis=0)
+        X = preprocessor.x_all
+        for name, model in anomaly_algorithms:
+            t0 = time.time()
+            model.fit(X)
+            t1 = time.time()
+            plt.subplot(1, len(anomaly_algorithms), plot_num)
+            plt.title(name, size=14)
+
+            # fit the data and tag outliers
+            if name == "Local Outlier Factor":
+                y_pred = model.fit_predict(X)
+            else:
+                y_pred = model.fit(X).predict(X)
+
+            # plot the levels lines and the points
+            if name != "Local Outlier Factor":  # LOF does not implement predict
+                # Z = model.decision_function(xy).reshape(XX.shape)
+                Z = model.predict(np.c_[xx.ravel(), yy.ravel()])
+                Z = Z.reshape(xx.shape)
+                plt.contour(xx, yy, Z, levels=[0], linewidths=2, colors='black')
+
+            colors = np.array(['#377eb8', '#ff7f00'])
+            plt.scatter(X[:, 0], X[:, 1], s=10, color=colors[(y_pred + 1) // 2])
+
+            plt.xlim(-5, 5)
+            plt.ylim(-5, 5)
+            plt.xticks(())
+            plt.yticks(())
+            plt.text(.99, .01, ('%.2fs' % (t1 - t0)).lstrip('0'),
+                     transform=plt.gca().transAxes, size=15,
+                     horizontalalignment='right')
+            plot_num += 1
+
+        plt.show()
+
 
     def run_isoForest(self):
+        """
+        https://medium.com/@often_weird/isolation-forest-algorithm-for-anomaly-detection-f88af2d5518d
+        :return:
+        """
         preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
-        preprocessor.preprocessing()
+        preprocessor.preprocessing(pca=True)
 
         print("x_all shape passed in iForest model: ", preprocessor.x_all.shape)
 
         print('Starting fitting Isolation Forests')
-        model = IsolationForest(contamination=0.03)
+        model = IsolationForest(contamination=0.03, n_estimators=10, warm_start=True, max_samples=100)
         cluster_labels = model.fit_predict(preprocessor.x_all)
 
         # The silhouette_score gives the average value for all the samples.
@@ -37,6 +121,32 @@ class Tester():
         # Compute the silhouette scores for each sample: shape=(350,)
         sample_silhouette_values = silhouette_samples(preprocessor.x_all, cluster_labels)
         print("sample_silhouette_values: " , sample_silhouette_values.shape)
+
+        # Plot decision lines
+        model.fit(preprocessor.x_train)
+        y_pred_train = model.predict(preprocessor.x_train)
+        y_pred_test = model.predict(preprocessor.x_test)
+
+        # plot the line, the samples, and the nearest vectors to the plane
+        x_min, x_max = preprocessor.x_train[:, 1].min() - 1, preprocessor.x_train[:, 1].max() + 1
+        y_min, y_max = preprocessor.x_test[:, 0].min() - 1, preprocessor.x_test[:, 0].max() + 1
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),
+                             np.arange(y_min, y_max, 0.1))
+
+        Z = model.decision_function(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
+
+        plt.title("IsolationForest on X features")
+        plt.contourf(xx, yy, Z, cmap=plt.cm.Blues_r)
+        b1 = plt.scatter(preprocessor.x_train[:, 0], preprocessor.x_train[:, 1], c='red')
+        b2 = plt.scatter(preprocessor.x_test[:, 0], preprocessor.x_test[:, 1], c='green')
+
+        plt.axis('tight')
+        plt.xlim((-5, 5))
+        plt.ylim((-5, 5))
+        plt.legend([b1, b2],
+                   ["X_training observations", "X_testing observations"],
+                   loc="lower right")
+        plt.show()
 
 
     def run_kMedians(self):
