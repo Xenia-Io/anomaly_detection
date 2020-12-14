@@ -1,4 +1,4 @@
-from sklearn.metrics import roc_curve, precision_recall_curve, auc, silhouette_score, silhouette_samples
+from sklearn.metrics import calinski_harabasz_score, silhouette_score, silhouette_samples
 from sklearn_extensions.fuzzy_kmeans import KMedians
 from sklearn.datasets import make_moons, make_blobs
 from sklearn.covariance import EllipticEnvelope
@@ -116,7 +116,12 @@ class Tester():
         # The silhouette_score gives the average value for all the samples.
         # This gives a perspective into the density and separation of the formed clusters
         silhouette_avg = silhouette_score(preprocessor.x_all, cluster_labels)
+        # CH criterion is most suitable in case when clusters are more
+        # or less spherical and compact in their middle
+        # the higher, the better
+        ch_score = calinski_harabasz_score(preprocessor.x_all, cluster_labels)
         print("The average silhouette_score is :", silhouette_avg)
+        print("The average calinski_harabasz_score is: ", ch_score)
 
         # Compute the silhouette scores for each sample: shape=(350,)
         sample_silhouette_values = silhouette_samples(preprocessor.x_all, cluster_labels)
@@ -181,8 +186,11 @@ class Tester():
 
             # The silhouette_score gives the average value for all the samples.
             silhouette_avg = silhouette_score(preprocessor.x_all, cluster_labels)
+            ch_score = calinski_harabasz_score(preprocessor.x_all, cluster_labels)
             print("For n_clusters =", n_clusters,
                   "The average silhouette_score is :", silhouette_avg)
+            print("For n_clusters =", n_clusters,
+                  "The average calinski_harabasz score is :", ch_score)
 
             # Compute the silhouette scores for each sample
             sample_silhouette_values = silhouette_samples(preprocessor.x_all, cluster_labels)
@@ -276,8 +284,11 @@ class Tester():
 
             # The silhouette_score gives the average value for all the samples.
             silhouette_avg = silhouette_score(preprocessor.x_all, cluster_labels)
+            ch_score = calinski_harabasz_score(preprocessor.x_all, cluster_labels)
             print("For n_clusters =", n_clusters,
                   "The average silhouette_score is :", silhouette_avg)
+            print("For n_clusters =", n_clusters,
+                  "The average calinski_harabasz score is :", ch_score)
 
             # Compute the silhouette scores for each sample
             sample_silhouette_values = silhouette_samples(preprocessor.x_all, cluster_labels)
