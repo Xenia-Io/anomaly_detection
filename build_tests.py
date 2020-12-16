@@ -362,19 +362,21 @@ class Tester():
         plt.show()
 
 
+    def make_patch_spines_invisible(self, ax):
+        ax.set_frame_on(True)
+        ax.patch.set_visible(False)
+        for sp in ax.spines.values():
+            sp.set_visible(False)
+
+
     def compare_scores(self, silhouette_scores, ch_score, davies_bouldin_scores, range_n_clusters):
-        host = host_subplot(111, axes_class=AA.Axes)
-        plt.subplots_adjust(right=0.75)
+        fig, host = plt.subplots()
+        fig.subplots_adjust(right=0.75)
 
         par1 = host.twinx()
         par2 = host.twinx()
 
-        offset = 60
-        new_fixed_axis = par2.get_grid_helper().new_fixed_axis
-        par2.axis["right"] = new_fixed_axis(loc="right", axes=par2,
-                                            offset=(offset, 0))
-
-        par2.axis["right"].toggle(all=True)
+        par2.spines["right"].set_position(("axes", 1.2))
 
         y_min, y_max = min(silhouette_scores) - 1, max(silhouette_scores) + 1
         host.set_xlim(range_n_clusters[0], range_n_clusters[-1])
@@ -385,9 +387,9 @@ class Tester():
         par1.set_ylabel("Calinski-Harabasz scores")
         par2.set_ylabel("Davies-Bouldin scores")
 
-        p1, = host.plot(range_n_clusters, silhouette_scores, label="Silhoutte scores")
-        p2, = par1.plot(range_n_clusters, ch_score, label="Calinski-Harabasz scores")
-        p3, = par2.plot(range_n_clusters, davies_bouldin_scores, label="Davies-Bouldin scores")
+        p1, = host.plot(range_n_clusters, silhouette_scores, "b-", label="Silhoutte scores")
+        p2, = par1.plot(range_n_clusters, ch_score, "r-", label="Calinski-Harabasz scores")
+        p3, = par2.plot(range_n_clusters, davies_bouldin_scores,"g-", label="Davies-Bouldin scores")
 
         y0_min, y0_max = min(ch_score) - 1, max(ch_score) + 1
         y_min, y_max = min(davies_bouldin_scores) - 1, max(davies_bouldin_scores) + 1
@@ -396,9 +398,19 @@ class Tester():
 
         host.legend()
 
-        host.axis["left"].label.set_color(p1.get_color())
-        par1.axis["right"].label.set_color(p2.get_color())
-        par2.axis["right"].label.set_color(p3.get_color())
+        host.yaxis.label.set_color(p1.get_color())
+        par1.yaxis.label.set_color(p2.get_color())
+        par2.yaxis.label.set_color(p3.get_color())
+
+        tkw = dict(size=4, width=1.5)
+        host.tick_params(axis='y', colors=p1.get_color(), **tkw)
+        par1.tick_params(axis='y', colors=p2.get_color(), **tkw)
+        par2.tick_params(axis='y', colors=p3.get_color(), **tkw)
+        host.tick_params(axis='x', **tkw)
+
+        lines = [p1, p2, p3]
+
+        host.legend(lines, [l.get_label() for l in lines])
 
         plt.draw()
         plt.show()
