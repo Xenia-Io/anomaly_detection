@@ -1,10 +1,12 @@
-from sklearn.metrics import calinski_harabasz_score, silhouette_score, silhouette_samples
+from sklearn.metrics import calinski_harabasz_score, silhouette_score, silhouette_samples, davies_bouldin_score
 from sklearn_extensions.fuzzy_kmeans import KMedians
 from sklearn.datasets import make_moons, make_blobs
+from mpl_toolkits.axes_grid1 import host_subplot
 from sklearn.covariance import EllipticEnvelope
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.ensemble import IsolationForest
 from pre_processor import Preprocessor
+import mpl_toolkits.axisartist as AA
 from sklearn.cluster import KMeans
 from feature_extractor import *
 import matplotlib.pyplot as plt
@@ -155,14 +157,17 @@ class Tester():
 
 
     def run_kMedians(self):
+        print('Starting fitting K-Medians model')
         preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
-        preprocessor.preprocessing()
-
-        print('Starting fitting K-Medians model', preprocessor.x_all.shape)
+        preprocessor.preprocessing(umap=True)
+        print("preprocessor.x_all.shape : ", preprocessor.x_all.shape)
 
         # Use silhouette score
         range_n_clusters = [2, 3, 4, 5, 6, 10, 20, 30, 40, 50, 67]
-        # range_n_clusters = [2,3,4,5,6]
+        davies_bouldin_scores = list()
+        silhouette_scores = list()
+        ch_score = list()
+
         print("Number of clusters: ", range_n_clusters)
         print("Random sample 499 from x_all: ", preprocessor.x_all[499])
         print("Shape of x_all passed in the model: ", preprocessor.x_all.shape)
@@ -186,9 +191,12 @@ class Tester():
 
             # The silhouette_score gives the average value for all the samples.
             silhouette_avg = silhouette_score(preprocessor.x_all, cluster_labels)
-            ch_score = calinski_harabasz_score(preprocessor.x_all, cluster_labels)
+            silhouette_scores.append(round(silhouette_score(preprocessor.x_all, cluster_labels), 2))
+            ch_score.append(round(calinski_harabasz_score(preprocessor.x_all, cluster_labels), 2))
+            davies_bouldin_scores.append(round(davies_bouldin_score(preprocessor.x_all, cluster_labels), 2))
+
             print("For n_clusters =", n_clusters,
-                  "The average silhouette_score is :", silhouette_avg)
+                  "The average silhouette_score is :", silhouette_scores)
             print("For n_clusters =", n_clusters,
                   "The average calinski_harabasz score is :", ch_score)
 
@@ -253,6 +261,8 @@ class Tester():
 
         plt.show()
 
+        self.compare_scores(silhouette_scores, ch_score, davies_bouldin_scores, range_n_clusters)
+
 
     def run_kMeans(self):
         preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
@@ -260,8 +270,8 @@ class Tester():
 
         print('Starting fitting K-Means model')
         # Use silhouette score
-        range_n_clusters = [2, 3, 4, 5, 6, 10, 18, 20, 30, 40, 50, 67]
-        # range_n_clusters = [2,3,4,5,6]
+        range_n_clusters = [2, 3, 4, 5, 6, 10, 20, 30, 40, 50, 67]
+
         print("Number of clusters: ", range_n_clusters)
         print("Random sample 499 from x_all: ", preprocessor.x_all[499])
         print("Shape of x_all passed in the model: ", preprocessor.x_all.shape)
@@ -350,3 +360,47 @@ class Tester():
                          fontsize=14, fontweight='bold')
 
         plt.show()
+
+
+    def compare_scores(self, silhouette_scores, ch_score, davies_bouldin_scores, range_n_clusters):
+        host = host_subplot(111, axes_class=AA.Axes)
+        plt.subplots_adjust(right=0.75)
+
+        par1 = host.twinx()
+        par2 = host.twinx()
+
+        offset = 60
+        new_fixed_axis = par2.get_grid_helper().new_fixed_axis
+        par2.axis["right"] = new_fixed_axis(loc="right", axes=par2,
+                                            offset=(offset, 0))
+
+        par2.axis["right"].toggle(all=True)
+
+        y_min, y_max = min(silhouette_scores) - 1, max(silhouette_scores) + 1
+        host.set_xlim(range_n_clusters[0], range_n_clusters[-1])
+        host.set_ylim(y_min, y_max)
+
+        host.set_xlabel("Number of clusters")
+        host.set_ylabel("Silhoutte scores")
+        par1.set_ylabel("Calinski-Harabasz scores")
+        par2.set_ylabel("Davies-Bouldin scores")
+
+        p1, = host.plot(range_n_clusters, silhouette_scores, label="Silhoutte scores")
+        p2, = par1.plot(range_n_clusters, ch_score, label="Calinski-Harabasz scores")
+        p3, = par2.plot(range_n_clusters, davies_bouldin_scores, label="Davies-Bouldin scores")
+
+        y0_min, y0_max = min(ch_score) - 1, max(ch_score) + 1
+        y_min, y_max = min(davies_bouldin_scores) - 1, max(davies_bouldin_scores) + 1
+        par1.set_ylim(y0_min, y0_max)
+        par2.set_ylim(y_min, y_max)
+
+        host.legend()
+
+        host.axis["left"].label.set_color(p1.get_color())
+        par1.axis["right"].label.set_color(p2.get_color())
+        par2.axis["right"].label.set_color(p3.get_color())
+
+        plt.draw()
+        plt.show()
+
+
