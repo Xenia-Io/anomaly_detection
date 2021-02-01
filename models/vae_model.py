@@ -1,3 +1,5 @@
+import os
+import graphviz
 from sklearn.tree import plot_tree
 from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Lambda
 from tensorflow.python.keras.layers import RepeatVector, TimeDistributed, Layer, Reshape
@@ -16,11 +18,12 @@ import tensorflow.keras.backend as bck
 import tensorflow_probability as tfp
 from kerastuner import HyperModel
 from sklearn import metrics, svm
+from sklearn import tree
 import kerastuner as kt
 import tensorflow as tf
 from utils import *
 import time
-
+from tensorflow.keras.callbacks import ModelCheckpoint
 from matplotlib.colors import ListedColormap
 # Import statements required for Plotly
 import plotly.offline as py
@@ -185,144 +188,6 @@ class VAE(tf.keras.Model):
 
     def idx2word(self, word_model, idx):
         return word_model.wv.index2word[idx]
-
-
-def plot_SVM_unbalanced(X, y):
-    # fit the model and get the separating hyperplane
-    clf = svm.SVC(kernel='linear', C=1.0)
-    clf.fit(X, y)
-
-    # fit the model and get the separating hyperplane using weighted classes
-    wclf = svm.SVC(kernel='linear', class_weight={1: 100})
-    wclf.fit(X, y)
-
-    # plot the samples
-    plt.scatter(X[:, 0], X[:, 1], c=y, cmap=plt.cm.Paired, edgecolors='k')
-
-    # plot the decision functions for both classifiers
-    ax = plt.gca()
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-
-    # create grid to evaluate model
-    xx = np.linspace(xlim[0], xlim[1], 30)
-    yy = np.linspace(ylim[0], ylim[1], 30)
-    YY, XX = np.meshgrid(yy, xx)
-    xy = np.vstack([XX.ravel(), YY.ravel()]).T
-
-    # get the separating hyperplane
-    Z = clf.decision_function(xy).reshape(XX.shape)
-
-    # plot decision boundary and margins
-    a = ax.contour(XX, YY, Z, colors='k', levels=[0], alpha=0.5, linestyles=['-'])
-
-    # get the separating hyperplane for weighted classes
-    Z = wclf.decision_function(xy).reshape(XX.shape)
-
-    # plot decision boundary and margins for weighted classes
-    b = ax.contour(XX, YY, Z, colors='r', levels=[0], alpha=0.5, linestyles=['-'])
-
-    plt.legend([a.collections[0], b.collections[0]], ["non weighted", "weighted"],
-               loc="upper right")
-    plt.show()
-
-
-def plot_SVM(mse_all_data, y_all, weighted = True):
-    # fit the model, don't regularize for illustration purposes
-    clf = svm.SVC(kernel='linear', C=1)
-
-    if weighted:
-        sample_weight = abs(np.ones(len(mse_all_data)))
-        # and bigger weights to some anomalies
-        sample_weight[y_all == 1] *= 5
-        clf.fit(mse_all_data, y_all, sample_weight=sample_weight)
-        plt.scatter(mse_all_data[:, 0], mse_all_data[:, 1], c=y_all, s=30 * sample_weight, cmap=plt.cm.Paired)
-
-    else:
-        clf.fit(mse_all_data, y_all)
-        plt.scatter(mse_all_data[:, 0], mse_all_data[:, 1], c=y_all, s=30, cmap=plt.cm.Paired)
-
-    # plot the decision function
-    ax = plt.gca()
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-    # create grid to evaluate model
-    xx = np.linspace(xlim[0], xlim[1], 30)
-    yy = np.linspace(ylim[0], ylim[1], 30)
-    YY, XX = np.meshgrid(yy, xx)
-    xy = np.vstack([XX.ravel(), YY.ravel()]).T
-    Z = clf.decision_function(xy).reshape(XX.shape)
-
-    # plot decision boundary and margins
-    ax.contour(XX, YY, Z, colors='k', levels=[-1, 0, 1], alpha=0.5,
-               linestyles=['--', '-', '--'])
-    # plot support vectors
-    ax.scatter(clf.support_vectors_[:, 0], clf.support_vectors_[:, 1], s=100,
-               linewidth=1, facecolors='none')
-    plt.show()
-
-
-def plot_decision_boundary_SVM(mse_data, y_):
-    h = 10.0  # step size in the mesh
-
-    # we create an instance of SVM and fit out data. We do not scale our
-    # data since we want to plot the support vectors
-    C = 1.0  # SVM regularization parameter
-    svc = svm.SVC(kernel='linear', C=C).fit(mse_data, y_)
-    rbf_svc = svm.SVC(kernel='rbf', gamma=0.7, C=C).fit(mse_data, y_)
-    poly_svc = svm.SVC(kernel='poly', degree=3, C=C).fit(mse_data, y_)
-    lin_svc = svm.LinearSVC(C=C).fit(mse_data, y_)
-
-    # create a mesh to plot in
-    # n= int(mse_test_data.shape[0]/2)
-    x_min, x_max = mse_data[:, 0].min() - 1, mse_data[:, 0].max() + 200
-    y_min, y_max = mse_data[:, 1].min() - 1, mse_data[:, 1].max() + 200
-    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                         np.arange(y_min, y_max, h))
-
-    # title for the plots
-    titles = ['SVC with linear kernel',
-              'LinearSVC (linear kernel)',
-              'SVC with RBF kernel',
-              'SVC with polynomial (degree 3) kernel']
-
-    for i, clf in enumerate((svc, lin_svc, rbf_svc, poly_svc)):
-        # Plot the decision boundary. For that, we will assign a color to each
-        # point in the mesh [x_min, x_max]x[y_min, y_max].
-        plt.subplot(2, 2, i + 1)
-        plt.subplots_adjust(wspace=0.4, hspace=0.4)
-
-        scores = clf.score(mse_data, y_)
-        if i ==0:
-            print("SVC with linear kernel has a score of ", scores)
-        elif i == 1:
-            print("LinearSVC (linear kernel) has a score of ", scores)
-        elif i == 2:
-            print("SVC with RBF kernel has a score of ", scores)
-        else:
-            print("SVC with polynomial (degree 3) kernel has a score of ", scores)
-
-        Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
-        # print(accuracy_score(y_true, Z))
-
-        # Put the result into a color plot
-        Z = Z.reshape(xx.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-
-        # Plot also the training points
-        plt.scatter(mse_data[:, 0], mse_data[:, 1], c=y_, cmap=plt.cm.coolwarm)
-        plt.xlabel('samples')
-        plt.ylabel('mse')
-        plt.xlim(xx.min(), xx.max())
-        plt.ylim(yy.min(), yy.max())
-        plt.xticks(())
-        plt.yticks(())
-        plt.title(titles[i])
-
-    plt.suptitle("Decision surfaces for different classifiers", fontsize=12)
-    plt.axis("tight")
-    plt.tight_layout(h_pad=0.2, w_pad=0.2, pad=2.5)
-    plt.show()
 
 
 def plot_decision_boundary(mse_train_data, y_train_, mse_test_data, y_test_):
@@ -562,10 +427,8 @@ def splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y):
     mse_all_data = np.column_stack((range(len(mse_all)), mse_all))
     y_train_val = np.concatenate((train_y, val_y), axis=0)
     y_all = np.concatenate((y_train_val, test_y), axis=0)
-    for i in range(len(y_all)):
-        if (y_all[i] == 1):
-            print("i = ", i, " is label ", y_all[i])
 
+    print("val_y[0] = ", val_y[0], type(val_y[0]))
     print("mse_all shape: ", mse_all_data.shape)
     print("y_all len: ", len(y_all))
 
@@ -580,8 +443,11 @@ def splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y):
     # scatter's x & y
     clean_x, clean_y = mse_all_data[y_all == 0][:, 0], mse_all_data[y_all == 0][:, 1]
     fraud_x, fraud_y = mse_all_data[y_all == 1][:, 0], mse_all_data[y_all == 1][:, 1]
-    print("clean x,y : ", clean_x, clean_y)
-    print("fraud x,y : ", fraud_x, fraud_y)
+    plt.scatter(clean_x, clean_y)
+    plt.scatter(fraud_x, fraud_y)
+    plt.show()
+    # print("clean x,y : ", clean_x, clean_y)
+    # print("fraud x,y : ", fraud_x, fraud_y)
 
     _df = pd.DataFrame({'mse': mse_all, 'labels': y_all})
     fraud = _df[_df.labels == 1]
@@ -604,13 +470,13 @@ def splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y):
     mse_train_data = np.column_stack((range(len(mse_train)), mse_train))
     y_train_ = df_copy_train.labels.values
     print("mse_train_data.shape: ", mse_train_data.shape, type(mse_train_data))
-    print("len(y_train_): ", len(y_train_), type(y_train_.tolist()), y_train_.tolist())
+    print("len(y_train_): ", len(y_train_))
 
     mse_test = df_copy_test.mse.values
     mse_test_data = np.column_stack((range(len(mse_test)), mse_test))
     y_test_ = df_copy_test.labels.values
     print("mse_test_data.shape: ", mse_test_data.shape, type(mse_test_data))
-    print("len(y_test_): ", len(y_test_), type(y_test_.tolist()), y_test_.tolist())
+    print("len(y_test_): ", len(y_test_))
 
     return mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_
 
@@ -622,19 +488,17 @@ if __name__ == "__main__":
     print(tf.keras.__version__)
 
     # Preprocessing the dataset
-    preprocessor = Preprocessor('./data/big_dataset.json', True, visualize= False)
-    df = preprocessor.load_data_supervised('./data/big_dataset.json')
+    preprocessor = Preprocessor('./data/dataset2.json', True, visualize= False)
+    df = preprocessor.load_data_supervised('./data/dataset2.json')
     df_copy = df.copy()
     messages = df['messages'].values
 
     for i in range(messages.shape[0]):
-        # print("i: ", i, " with message: ", messages[i])
         messages[i] = ''.join([i for i in messages[i] if not i.isdigit()])
         messages[i] = gensim.utils.simple_preprocess (messages[i])
-        # print("i: ", i, " with message: ", messages[i])
 
     w2v_model, pretrained_weights, vocab_size, emdedding_size = build_NLP_model(messages)
-    test_NLP_model(w2v_model)
+    # test_NLP_model(w2v_model)
 
     # Data preparation for feeding the network
     set_x, set_x_test, set_y, set_y_test, train_x, train_y, val_x, \
@@ -648,15 +512,29 @@ if __name__ == "__main__":
     # Visualization
     visualise_data(set_x, set_x_test, set_y, set_y_test, tsne=False, pca=False, umap=False)
 
+    checkpoint_path = "training_2/cp-{epoch:04d}.ckpt"
+    checkpoint_dir = os.path.dirname(checkpoint_path)
 
-    # Train the model
-    history = vae.fit(
-        train_x, train_x,
-        epochs=1,
-        batch_size=300,
-        validation_data=(val_x, val_x),
-        shuffle=True
-    ).history
+
+    checkpoint = ModelCheckpoint(filepath=checkpoint_path,
+                                 save_weights_only=True,
+                                 verbose=1)
+
+    vae.save_weights(checkpoint_path.format(epoch=0))
+
+    # # Train the model
+    # history = vae.fit(
+    #     train_x, train_x,
+    #     epochs=4,
+    #     batch_size=500,
+    #     validation_data=(val_x, val_x),
+    #     shuffle=True, callbacks=[checkpoint]
+    # ).history
+
+    latest = tf.train.latest_checkpoint(checkpoint_dir)
+
+    vae.load_weights(latest)
+
 
     # # Plot the training and validation loss
     # fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
@@ -677,28 +555,49 @@ if __name__ == "__main__":
     reconstructions = vae.decoder.predict(encoded_inputs)
 
     train_val_x = np.concatenate((train_x, val_x), axis=0)
+    train_val_y = np.concatenate((train_y, val_y), axis=0)
     encoded_inputs = vae.encoder.predict(train_val_x)
     reconstructions_train_val = vae.decoder.predict(encoded_inputs)
 
     mse_train_val = np.mean(np.power(train_val_x - reconstructions_train_val, 2), axis=1)
     mse_test = np.mean(np.power(test_x - reconstructions, 2), axis=1)
 
-    # Train the model using the training set
-    # clf.fit(mse_all_data, )
-    #
-    # # prediction on test set
-    # y_pred = clf.predict(mse_test.reshape(-1, 1))
-    #
-    # # Model Accuracy, how often is the classifier correct?
-    # print("RandomForest classifier's Accuracy: ", metrics.accuracy_score(test_y, y_pred))
+    print("MSE training:", mse_train_val)
+    print("MSE test:", mse_test)
 
-    mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_ = \
-                            splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y)
+    # Find threshold
+    mse_all = np.concatenate((mse_train_val, mse_test), axis=0)
+    y_all = np.concatenate((train_val_y, test_y), axis=0)
+    clf = tree.DecisionTreeClassifier(max_depth=5)  # This is to ensure that we only get a threshold
+    clf = clf.fit(mse_all.reshape(-1, 1), y_all)
+
+    dot_data = tree.export_graphviz(clf, class_names=['0', '1'], out_file=None)
+    graph = graphviz.Source(dot_data)
+    print(graph)
+
+    text_representation = tree.export_text(clf)
+    print(text_representation)
+
+    fig = plt.figure(figsize=(10, 10))
+    _ = tree.plot_tree(clf, class_names=['0', '1'], filled=True)
+    # plt.savefig('./plots/tree_threshold_.png')
+    plt.show()
+
+    threshold = 915.32
+    print(len(np.argwhere(mse_test > threshold)), " instances must be classified again out of the ",
+          mse_test.shape[0] , " testing data." )
+
+    print("mse_all : ", type(mse_all), mse_all.shape)
+    print("test_x :", type(test_x), test_x.shape)
+    print("mse_test:", type(mse_test), mse_test.shape)
+
+
+
+
+    # mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_ = \
+    #                         splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y)
 
     # Plot decision boundary
-    # plot_SVM_unbalanced(mse_all_data, y_all)
-    plot_SVM(mse_all_data, y_all)
-    # plot_decision_boundary_SVM(mse_all_data, y_all)
     # plot_decision_boundary(mse_train_data, y_train_, mse_test_data, y_test_)
     # check_overfitting(mse_train_data, y_train_, mse_test_data, y_test_)
 

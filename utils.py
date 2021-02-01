@@ -176,7 +176,7 @@ def build_NLP_model(messages):
 
     print('Result embedding shape:', pretrained_weights.shape)
     print("Vocabulary Size: {} - Embedding Dim: {}".format(vocab_size, emdedding_size))
-    print("Vocabulary: ", w2v_model.wv.vocab.keys())
+    # print("Vocabulary: ", w2v_model.wv.vocab.keys())
 
     return w2v_model, pretrained_weights, vocab_size, emdedding_size
 
@@ -191,7 +191,7 @@ def test_NLP_model(model):
 
 
 def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
-    print('\nPreparing the data for VAE...')
+    print('\nPreparing the data for Deep Learning models...')
     DROP_THRESHOLD = 1
 
     # splitting by class
@@ -230,8 +230,6 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
     set_x = []
     set_y = []
     for w, c in sequences_train:
-        # print("w = ", w)
-        # print("c = ", c)
         set_x.append(w)
         set_y.append(cat_dict[c])
 
@@ -253,20 +251,16 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
     VALID_PER = 0.15  # Percentage of the whole set that will be separated for validation
 
     total_samples = df_copy_train.shape[0]
-    total_samples_test = df_copy_test.shape[0]
     n_val = int(VALID_PER * total_samples)
     n_train = total_samples - n_val
-    # n_train = 200
     n_test = df_copy_test.shape[0]
 
-    random_i = random.sample(range(total_samples), total_samples)
-    # random_j = random.sample(range(total_samples_test), total_samples_test)
-    print("df_copy_train.shape: ", df_copy_train.shape) # (7006, 4)
+    shuffled_indeces = random.sample(range(total_samples), total_samples)
 
-    train_x = set_x[random_i[:n_train]]
-    train_y = set_y[random_i[:n_train]]
-    val_x = set_x[random_i[n_train:]]
-    val_y = set_y[random_i[n_train:]]
+    train_x = set_x[shuffled_indeces[:n_train]]
+    train_y = set_y[shuffled_indeces[:n_train]]
+    val_x = set_x[shuffled_indeces[n_train:]]
+    val_y = set_y[shuffled_indeces[n_train:]]
     test_x = set_x_test[:n_test]
     test_y = set_y_test[:n_test]
 

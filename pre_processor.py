@@ -113,9 +113,10 @@ class Preprocessor():
                 dict_of_lists = {}
                 messages = []
                 labels = []
-                for item in range(len(data['responses'][0]['hits']['hits'])):
-                    labels.append(data['responses'][0]['hits']['hits'][item]['_source']['severity'])
-                    messages.append(data['responses'][0]['hits']['hits'][item]['_source']['message'])
+
+                for item in range(len(data)):
+                    labels.append(data[item]['_source']['severity'])
+                    messages.append(data[item]['_source']['message'])
                 dict_of_lists['messages'] = messages
                 dict_of_lists['labels'] = labels
 
@@ -130,7 +131,7 @@ class Preprocessor():
             df['messages'] = x_data
 
             # Create mappings for labels
-            categorical_mapping = {'info': 'clean', 'warning': 'clean', 'notice': 'clean', 'severe': 'fraud'}
+            categorical_mapping = {'info': 'clean', 'warning': 'clean', 'notice': 'clean', 'err': 'fraud'}
             numerical_mapping = {'clean': 0, 'fraud': 1}
 
             # Apply first categorical mapping for grouping data in two classes
@@ -162,6 +163,7 @@ class Preprocessor():
 
         else:
             raise NotImplementedError('Function only supports json files!')
+
 
     def load_data(self, log_file, train_ratio=0.7, \
                   split_type='sequential', save_csv=False, printing=False):
