@@ -235,7 +235,12 @@ class Preprocessor():
             raise NotImplementedError('load_data() only support json files!')
 
 
-    def _split_data(self, x_data, y_data=None, train_ratio=0.7, split_type='uniform'):
+    def _split_data(self, x_data, y_data=None, train_ratio=0.7):
+        # Random shuffle
+        indexes = shuffle(np.arange(x_data.shape[0]))
+        x_data = x_data[indexes]
+        if y_data is not None:
+            y_data = y_data[indexes]
 
         num_train = int(train_ratio * x_data.shape[0])
         x_train = x_data[0:num_train]

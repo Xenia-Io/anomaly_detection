@@ -23,6 +23,7 @@ import kerastuner as kt
 import tensorflow as tf
 from utils import *
 import time
+from sklearn.metrics import classification_report
 from tensorflow.keras.callbacks import ModelCheckpoint
 from matplotlib.colors import ListedColormap
 # Import statements required for Plotly
@@ -581,15 +582,94 @@ if __name__ == "__main__":
     fig = plt.figure(figsize=(10, 10))
     _ = tree.plot_tree(clf, class_names=['0', '1'], filled=True)
     # plt.savefig('./plots/tree_threshold_.png')
-    plt.show()
+    # plt.show()
 
     threshold = 915.32
-    print(len(np.argwhere(mse_test > threshold)), " instances must be classified again out of the ",
-          mse_test.shape[0] , " testing data." )
+    mse_test = np.asarray(mse_test)
 
-    print("mse_all : ", type(mse_all), mse_all.shape)
-    print("test_x :", type(test_x), test_x.shape)
-    print("mse_test:", type(mse_test), mse_test.shape)
+    # Get the indeces of the data with high MSE
+    reclassifying_indeces = np.argwhere(mse_test > threshold)
+    print(len(reclassifying_indeces), " instances must be classified again out of the ",
+          mse_test.shape[0] , " testing data." )
+    count_debug = 0
+    for i in range(len(mse_test)):
+        if mse_test[i] > 915.32:
+            count_debug += 1
+    print("data that are > 915.32: ", count_debug)
+
+    count_debug = 0
+    for i in range(len(mse_test)):
+        if mse_test[i] <= 915.32:
+            count_debug += 1
+    print("data that are <= 915.32: ", count_debug)
+
+    mse_test_ = sorted(mse_test)
+    print("5 maximum values from MSE_test:", mse_test_[-5:])
+    print("5 minimum values from MSE_test:", mse_test_[:5])
+    mse_train_ = sorted(mse_train_val)
+    print("5 maximum values from MSE_train:", mse_train_[-5:])
+    print("5 minimum values from MSE_train:", mse_train_[:5])
+
+
+    print("\n...Starting supervised learning for missclassified data...")
+
+
+    misclassified_X = test_x[reclassifying_indeces[:]]
+    misclassified_y = test_y[reclassifying_indeces[:]]
+    debug_var = mse_test[reclassifying_indeces[:]]
+    print("\n MSE values above 915 that must be classified again : ", len(debug_var))
+
+    print("\n misclassified data = ", len(misclassified_X))
+    misclassified_X = arr = np.squeeze(misclassified_X, -2)
+    (_x_train, _y_train), (_x_test, _y_test) = preprocessor._split_data(misclassified_X, y_data = misclassified_y)
+    print(misclassified_X.shape, type(misclassified_X))
+    print(_x_train.shape, type(_x_train))
+    dec_tree_clf = tree.DecisionTreeClassifier().fit(_x_train, _y_train)
+    _y_pred = dec_tree_clf.predict(_x_test)
+    print('Accuracy of Decision Tree classifier on training set: {:.2f}'
+          .format(dec_tree_clf.score(_x_train, _y_train)))
+    print('Accuracy of Decision Tree classifier on testing set: {:.2f}'
+          .format(dec_tree_clf.score(_x_test, _y_test)))
+
+
+    print("\n ************ Print test metrics ************ \n")
+
+    # evaluate the model
+    accuracy = metrics.accuracy_score(_y_test, _y_pred)
+    f1_score = metrics.f1_score(_y_test, _y_pred)
+    precision = metrics.precision_score(_y_test, _y_pred)
+    recall = metrics.recall_score(_y_test, _y_pred)
+
+
+    print("F1-score: ", round(f1_score * 100, 2), "%")
+    print("Precision: ", round(precision * 100, 2), "%")
+    print("Recall: ", round(recall * 100, 2), "%")
+    print("Accuracy: ", round(accuracy * 100, 2), "%")
+
+    # initialize the label names
+    labelNames = ["clean", "anomalies"]
+    # Classification report
+    print(classification_report(_y_test, _y_pred, target_names=labelNames))
+
+
+    fpr_roc, tpr_roc, thresholds_roc = metrics.roc_curve(_y_test, _y_pred)
+
+    roc_auc = metrics.auc(fpr_roc, tpr_roc)
+    print("auc = ", roc_auc)
+    plt.figure()
+    lw = 2
+    plt.plot(fpr_roc, tpr_roc, color='darkorange',
+             lw=lw, label='ROC curve ' )
+    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic example')
+    plt.legend(loc="lower right")
+    plt.show()
+
+
 
 
 
