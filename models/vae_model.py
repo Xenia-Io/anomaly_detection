@@ -1,5 +1,8 @@
 import os
+import warnings
+
 import graphviz
+from sklearn.exceptions import NotFittedError
 from sklearn.tree import plot_tree
 from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Lambda
 from tensorflow.python.keras.layers import RepeatVector, TimeDistributed, Layer, Reshape
@@ -7,6 +10,7 @@ from kerastuner.engine.hyperparameters import HyperParameters
 from tensorflow.keras.models import Model, Sequential
 from sklearn.ensemble import (RandomForestClassifier, ExtraTreesClassifier,
                               AdaBoostClassifier)
+from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
 from tensorflow.keras import layers, regularizers
@@ -30,6 +34,7 @@ from matplotlib.colors import ListedColormap
 import plotly.offline as py
 import plotly.graph_objs as go
 from plotly import tools
+from sklearn.model_selection import GridSearchCV
 
 tfd = tfp.distributions
 
@@ -482,6 +487,34 @@ def splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y):
     return mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_
 
 
+def versiontuple(v):
+    return tuple(map(int, (v.split("."))))
+
+
+def plot_decision_regions(X, y, classifier, resolution=0.02):
+
+    # setup marker generator and color map
+    markers = ('s', 'x', 'o', '^', 'v')
+    colors = ('red', 'blue', 'lightgreen', 'gray', 'cyan')
+    cmap = ListedColormap(colors[:len(np.unique(y))])
+
+    # plot the decision surface
+    x1_min, x1_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+    x2_min, x2_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+    xx1, xx2 = np.meshgrid(np.arange(x1_min, x1_max, resolution),
+                           np.arange(x2_min, x2_max, resolution))
+    Z = classifier.predict(np.array([xx1.ravel(), xx2.ravel()]).T)
+    Z = Z.reshape(xx1.shape)
+    plt.contourf(xx1, xx2, Z, alpha=0.4, cmap=cmap)
+    plt.xlim(xx1.min(), xx1.max())
+    plt.ylim(xx2.min(), xx2.max())
+
+    for idx, cl in enumerate(np.unique(y)):
+        plt.scatter(x=X[y == cl, 0], y=X[y == cl, 1],
+                    alpha=0.8, c=cmap(idx),
+                    marker=markers[idx], label=cl)
+
+
 if __name__ == "__main__":
     tf.config.experimental_run_functions_eagerly(True)
     print(tf.__version__)
@@ -526,7 +559,7 @@ if __name__ == "__main__":
     # # Train the model
     # history = vae.fit(
     #     train_x, train_x,
-    #     epochs=4,
+    #     epochs=1,
     #     batch_size=500,
     #     validation_data=(val_x, val_x),
     #     shuffle=True, callbacks=[checkpoint]
@@ -579,8 +612,8 @@ if __name__ == "__main__":
     text_representation = tree.export_text(clf)
     print(text_representation)
 
-    fig = plt.figure(figsize=(10, 10))
-    _ = tree.plot_tree(clf, class_names=['0', '1'], filled=True)
+    # fig = plt.figure(figsize=(10, 10))
+    # _ = tree.plot_tree(clf, class_names=['0', '1'], filled=True)
     # plt.savefig('./plots/tree_threshold_.png')
     # plt.show()
 
@@ -595,72 +628,127 @@ if __name__ == "__main__":
     for i in range(len(mse_test)):
         if mse_test[i] > 915.32:
             count_debug += 1
-    print("data that are > 915.32: ", count_debug)
+    print("data that are > threshold: ", count_debug)
 
     count_debug = 0
     for i in range(len(mse_test)):
         if mse_test[i] <= 915.32:
             count_debug += 1
-    print("data that are <= 915.32: ", count_debug)
-
-    mse_test_ = sorted(mse_test)
-    print("5 maximum values from MSE_test:", mse_test_[-5:])
-    print("5 minimum values from MSE_test:", mse_test_[:5])
-    mse_train_ = sorted(mse_train_val)
-    print("5 maximum values from MSE_train:", mse_train_[-5:])
-    print("5 minimum values from MSE_train:", mse_train_[:5])
+    print("data that are <= threshold: ", count_debug)
 
 
     print("\n...Starting supervised learning for missclassified data...")
-
-
     misclassified_X = test_x[reclassifying_indeces[:]]
     misclassified_y = test_y[reclassifying_indeces[:]]
     debug_var = mse_test[reclassifying_indeces[:]]
-    print("\n MSE values above 915 that must be classified again : ", len(debug_var))
+    print("\n MSE values above threshold that must be classified again : ", len(debug_var))
 
-    print("\n misclassified data = ", len(misclassified_X))
     misclassified_X = arr = np.squeeze(misclassified_X, -2)
+    misclassified_y = misclassified_y.reshape(-1,)
+    misclassified_X = PCA(n_components=2).fit_transform(misclassified_X)
     (_x_train, _y_train), (_x_test, _y_test) = preprocessor._split_data(misclassified_X, y_data = misclassified_y)
-    print(misclassified_X.shape, type(misclassified_X))
-    print(_x_train.shape, type(_x_train))
-    dec_tree_clf = tree.DecisionTreeClassifier().fit(_x_train, _y_train)
-    _y_pred = dec_tree_clf.predict(_x_test)
-    print('Accuracy of Decision Tree classifier on training set: {:.2f}'
-          .format(dec_tree_clf.score(_x_train, _y_train)))
-    print('Accuracy of Decision Tree classifier on testing set: {:.2f}'
-          .format(dec_tree_clf.score(_x_test, _y_test)))
 
+    # Plot missclassified data
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=80)
+    cm_bright = ListedColormap(['#FF0000', '#0000FF'])
+    ax.scatter(misclassified_X[:, 0], misclassified_X[:, 1], c=(misclassified_y), cmap=cm_bright, alpha=0.6)
+    plt.title("Instances with MSE values > threshold grouped by class")
+    plt.show()
+
+    # Fine tuning SVM with GridSearch
+    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(15, 10), sharey=True)
+    print(misclassified_X.shape)
+    print(misclassified_y.shape)
+
+    C_range = np.logspace(-2, 10, 13)
+    gamma_range = np.logspace(-9, 3, 13)
+    param_grid = dict(gamma=gamma_range, C=C_range)
+    cv = StratifiedShuffleSplit(n_splits=5, test_size=0.2, random_state=42)
+    grid = GridSearchCV(svm.SVC(kernel='rbf'), param_grid=param_grid, cv=cv)
+    grid.fit(misclassified_X, misclassified_y)
+
+    # C_2d_range = [1e-2, 1, 1e2]
+    # gamma_2d_range = [1e-1, 1, 1e1]
+    # classifiers = []
+    # for C in C_2d_range:
+    #     for gamma in gamma_2d_range:
+    #         clf = svm.SVC(kernel='rbf', C=C, gamma=gamma)
+    #         clf.fit(misclassified_X, misclassified_y)
+    #         classifiers.append((C, gamma, clf))
+    print("The best parameters are %s with a score of %0.2f"
+          % (grid.best_params_, grid.best_score_))
+
+    # Visualization of RBF decision surfaces
+    svm_rbf = svm.SVC(kernel='rbf', C=1.0, gamma=1.0, decision_function_shape='ovo')
+    svm_rbf.fit(_x_train, _y_train)
+    plot_decision_regions(misclassified_X, misclassified_y, classifier=svm_rbf)
+    plt.legend(loc='upper left')
+    plt.tight_layout()
+    plt.show()
+    # plt.figure(figsize=(8, 6))
+    # min1, max1 = misclassified_X[:, 0].min() - 1, misclassified_X[:, 0].max() + 1  # 1st feature
+    # min2, max2 = misclassified_X[:, 1].min() - 1, misclassified_X[:, 1].max() + 1  # 2nd feature
+    # x1_scale = np.arange(min1, max1, 10.0)
+    # x2_scale = np.arange(min2, max2, 10.0)
+    # x_grid, y_grid = np.meshgrid(x1_scale, x2_scale)
+    # # flatten each grid to a vector
+    # x_g, y_g = x_grid.flatten(), y_grid.flatten()
+    # x_g, y_g = x_g.reshape((len(x_g), 1)), y_g.reshape((len(y_g), 1))
+    # # xx, yy = np.meshgrid(np.linspace(-3, 3, 200), np.linspace(-3, 3, 200))
+    #
+    # grid = np.hstack((x_g, y_g))
+    #
+    # # make predictions for the grid
+    # svm_rbf = svm.SVC(kernel='rbf', C=1.0, gamma=1.0, decision_function_shape='ovo')
+    # svm_rbf.fit(_x_train, _y_train)
+    #
+    #
+    # # reshape the predictions back into a grid
+    # zz = yhat.reshape(x_grid.shape)
+    # # plot the grid of x, y and z values as a surface
+    # plt.contourf(x_grid, y_grid, zz, cmap='Paired')
+    # # create scatter plot for samples from each class
+    # for class_value in range(2):
+    #     # get row indexes for samples with this class
+    #     row_ix = np.where(misclassified_y == class_value)
+    #     # create scatter of these samples
+    #     plt.scatter(misclassified_X[row_ix, 0], misclassified_X[row_ix, 1], cmap='Paired')
+    # # show the plot
+    # plt.title("Decision surfaces of the SVM with RBF kernel")
+    # plt.show()
+
+    # Apply SVM with RBF kernel for missclassified data
+    _y_pred = svm_rbf.predict(_x_test)
 
     print("\n ************ Print test metrics ************ \n")
+    print('Accuracy of SVM on training set: {:.2f}'
+          .format(svm_rbf.score(_x_train, _y_train)))
+    print('Accuracy of SVM on testing set: {:.2f}'
+          .format(svm_rbf.score(_x_test, _y_test)))
 
-    # evaluate the model
     accuracy = metrics.accuracy_score(_y_test, _y_pred)
     f1_score = metrics.f1_score(_y_test, _y_pred)
     precision = metrics.precision_score(_y_test, _y_pred)
     recall = metrics.recall_score(_y_test, _y_pred)
-
 
     print("F1-score: ", round(f1_score * 100, 2), "%")
     print("Precision: ", round(precision * 100, 2), "%")
     print("Recall: ", round(recall * 100, 2), "%")
     print("Accuracy: ", round(accuracy * 100, 2), "%")
 
-    # initialize the label names
-    labelNames = ["clean", "anomalies"]
     # Classification report
+    labelNames = ["clean", "anomalies"]
     print(classification_report(_y_test, _y_pred, target_names=labelNames))
-
-
     fpr_roc, tpr_roc, thresholds_roc = metrics.roc_curve(_y_test, _y_pred)
 
     roc_auc = metrics.auc(fpr_roc, tpr_roc)
-    print("auc = ", roc_auc)
+    print("AUC = ", roc_auc)
+
+    # Plot ROC curve for SVM
     plt.figure()
-    lw = 2
     plt.plot(fpr_roc, tpr_roc, color='darkorange',
-             lw=lw, label='ROC curve ' )
-    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+             lw=2, label='ROC curve ' )
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
     plt.xlabel('False Positive Rate')
@@ -668,10 +756,6 @@ if __name__ == "__main__":
     plt.title('Receiver operating characteristic example')
     plt.legend(loc="lower right")
     plt.show()
-
-
-
-
 
 
     # mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_ = \
