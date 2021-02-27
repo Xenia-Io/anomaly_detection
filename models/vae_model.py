@@ -14,7 +14,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
 from tensorflow.keras import layers, regularizers
-from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.optimizers import SGD, Adam
 from kerastuner.tuners import RandomSearch
 import tensorflow.keras.losses as tf_losses
 from sklearn.metrics import accuracy_score
@@ -30,7 +30,6 @@ import time
 from sklearn.metrics import classification_report
 from tensorflow.keras.callbacks import ModelCheckpoint
 from matplotlib.colors import ListedColormap
-# Import statements required for Plotly
 import plotly.offline as py
 import plotly.graph_objs as go
 from plotly import tools
@@ -154,46 +153,6 @@ class VAE(tf.keras.Model):
             "reconstruction_loss": reconstruction_loss,
             "kl_loss": kl_loss,
         }
-
-
-    def detect_mad_outliers(self, points, threshold=3.5):
-        # calculate the median of the input array
-        median = np.median(points, axis=0)
-
-        # calculate the absolute difference of each data point to the calculated median
-        deviation = np.abs(points - median)
-
-        # take the median of those absolute differences
-        med_abs_deviation = np.median(deviation)
-
-        # 0.6745 is the 0.75th quartile of the standard normal distribution,
-        # to which the MAD converges.
-        modified_z_score = 0.6745 * deviation / med_abs_deviation
-
-        # return as extra information what the original mse value was at which the threshold is hit
-        # need to find a way to compute this mathematically, but I'll just use the index of the nearest candidate for now
-        idx = (np.abs(modified_z_score - threshold)).argmin()
-        print("idx 1: ", idx)
-        if idx >= len(points):
-            idx = np.argmin(points)
-        print("idx 2: ", idx)
-        threshold_value = points[idx]
-
-        return modified_z_score, threshold_value
-
-
-    def word2idx(self, word_model, word):
-        try:
-            return word_model.wv.vocab[word].index
-            # If word is not in index return 0. I realize this means that this
-            # is the same as the word of index 0 (i.e. most frequent word), but 0s
-            # will be padded later anyway by the embedding layer (which also
-            # seems dirty but I couldn't find a better solution right now)
-        except KeyError:
-            return 0
-
-    def idx2word(self, word_model, idx):
-        return word_model.wv.index2word[idx]
 
 
 def plot_decision_boundary(mse_train_data, y_train_, mse_test_data, y_test_):
@@ -491,7 +450,7 @@ def versiontuple(v):
     return tuple(map(int, (v.split("."))))
 
 
-def plot_decision_regions(X, y, classifier, resolution=0.02):
+def plot_decision_regions(X, y, classifier, title = None, resolution=10.0):
 
     # setup marker generator and color map
     markers = ('s', 'x', 'o', '^', 'v')
@@ -513,6 +472,7 @@ def plot_decision_regions(X, y, classifier, resolution=0.02):
         plt.scatter(x=X[y == cl, 0], y=X[y == cl, 1],
                     alpha=0.8, c=cmap(idx),
                     marker=markers[idx], label=cl)
+    plt.title(title)
 
 
 if __name__ == "__main__":
@@ -522,8 +482,8 @@ if __name__ == "__main__":
     print(tf.keras.__version__)
 
     # Preprocessing the dataset
-    preprocessor = Preprocessor('./data/dataset2.json', True, visualize= False)
-    df = preprocessor.load_data_supervised('./data/dataset2.json')
+    preprocessor = Preprocessor('../data/dataset_110k.json', True, visualize= False)
+    df = preprocessor.load_data_supervised('../data/dataset_110k.json')
     df_copy = df.copy()
     messages = df['messages'].values
 
@@ -540,13 +500,16 @@ if __name__ == "__main__":
 
 
     vae = VAE(pretrained_weights, emdedding_size, vocab_size)
-    vae.compile(optimizer= 'adam')
+
+    vae.compile(optimizer = Adam(learning_rate=0.01))
+    print(bck.eval(vae.optimizer))
+    print(bck.eval(vae.optimizer.lr))
     # vae.summary()
 
     # Visualization
     visualise_data(set_x, set_x_test, set_y, set_y_test, tsne=False, pca=False, umap=False)
 
-    checkpoint_path = "training_2/cp-{epoch:04d}.ckpt"
+    checkpoint_path = "training_weights_110k/cp-{epoch:04d}.ckpt"
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
 
@@ -559,8 +522,8 @@ if __name__ == "__main__":
     # # Train the model
     # history = vae.fit(
     #     train_x, train_x,
-    #     epochs=1,
-    #     batch_size=500,
+    #     epochs=50,
+    #     batch_size=400,
     #     validation_data=(val_x, val_x),
     #     shuffle=True, callbacks=[checkpoint]
     # ).history
@@ -602,7 +565,7 @@ if __name__ == "__main__":
     # Find threshold
     mse_all = np.concatenate((mse_train_val, mse_test), axis=0)
     y_all = np.concatenate((train_val_y, test_y), axis=0)
-    clf = tree.DecisionTreeClassifier(max_depth=5)  # This is to ensure that we only get a threshold
+    clf = tree.DecisionTreeClassifier(max_depth=2)  # This is to ensure that we only get a threshold
     clf = clf.fit(mse_all.reshape(-1, 1), y_all)
 
     dot_data = tree.export_graphviz(clf, class_names=['0', '1'], out_file=None)
@@ -612,12 +575,13 @@ if __name__ == "__main__":
     text_representation = tree.export_text(clf)
     print(text_representation)
 
+
     # fig = plt.figure(figsize=(10, 10))
     # _ = tree.plot_tree(clf, class_names=['0', '1'], filled=True)
-    # plt.savefig('./plots/tree_threshold_.png')
+    # plt.savefig('../plots/01022021/tree_threshold_100k.png')
     # plt.show()
 
-    threshold = 915.32
+    threshold = 13.2
     mse_test = np.asarray(mse_test)
 
     # Get the indeces of the data with high MSE
@@ -626,13 +590,13 @@ if __name__ == "__main__":
           mse_test.shape[0] , " testing data." )
     count_debug = 0
     for i in range(len(mse_test)):
-        if mse_test[i] > 915.32:
+        if mse_test[i] > threshold:
             count_debug += 1
     print("data that are > threshold: ", count_debug)
 
     count_debug = 0
     for i in range(len(mse_test)):
-        if mse_test[i] <= 915.32:
+        if mse_test[i] <= threshold:
             count_debug += 1
     print("data that are <= threshold: ", count_debug)
 
@@ -656,16 +620,16 @@ if __name__ == "__main__":
     plt.show()
 
     # Fine tuning SVM with GridSearch
-    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(15, 10), sharey=True)
-    print(misclassified_X.shape)
-    print(misclassified_y.shape)
+    print("misclassified_X.shape = ", misclassified_X.shape)
+    print("misclassified_X.shape = ", misclassified_y.shape)
 
-    C_range = np.logspace(-2, 10, 13)
-    gamma_range = np.logspace(-9, 3, 13)
-    param_grid = dict(gamma=gamma_range, C=C_range)
-    cv = StratifiedShuffleSplit(n_splits=5, test_size=0.2, random_state=42)
-    grid = GridSearchCV(svm.SVC(kernel='rbf'), param_grid=param_grid, cv=cv)
-    grid.fit(misclassified_X, misclassified_y)
+    # # GridSearch on SVM's parameters
+    # C_range = np.logspace(-2, 10, 13)
+    # gamma_range = np.logspace(-9, 3, 13)
+    # param_grid = dict(gamma=gamma_range, C=C_range)
+    # cv = StratifiedShuffleSplit(n_splits=5, test_size=0.2, random_state=42)
+    # grid = GridSearchCV(svm.SVC(kernel='rbf'), param_grid=param_grid, cv=cv)
+    # grid.fit(misclassified_X, misclassified_y)
 
     # C_2d_range = [1e-2, 1, 1e2]
     # gamma_2d_range = [1e-1, 1, 1e1]
@@ -675,49 +639,110 @@ if __name__ == "__main__":
     #         clf = svm.SVC(kernel='rbf', C=C, gamma=gamma)
     #         clf.fit(misclassified_X, misclassified_y)
     #         classifiers.append((C, gamma, clf))
-    print("The best parameters are %s with a score of %0.2f"
-          % (grid.best_params_, grid.best_score_))
+    # print("The best parameters are %s with a score of %0.2f"
+    #       % (grid.best_params_, grid.best_score_))
+    #
+    # scores = grid.cv_results_['mean_test_score'].reshape(len(C_range),
+    #                                                      len(gamma_range))
 
-    # Visualization of RBF decision surfaces
-    svm_rbf = svm.SVC(kernel='rbf', C=1.0, gamma=1.0, decision_function_shape='ovo')
-    svm_rbf.fit(_x_train, _y_train)
-    plot_decision_regions(misclassified_X, misclassified_y, classifier=svm_rbf)
-    plt.legend(loc='upper left')
-    plt.tight_layout()
-    plt.show()
+    # Draw heatmap of the validation accuracy as a function of gamma and C
+    #
+    # The score are encoded as colors with the hot colormap which varies from dark
+    # red to bright yellow. As the most interesting scores are all located in the
+    # 0.92 to 0.97 range we use a custom normalizer to set the mid-point to 0.92 so
+    # as to make it easier to visualize the small variations of score values in the
+    # interesting range while not brutally collapsing all the low score values to
+    # the same color.
+
     # plt.figure(figsize=(8, 6))
-    # min1, max1 = misclassified_X[:, 0].min() - 1, misclassified_X[:, 0].max() + 1  # 1st feature
-    # min2, max2 = misclassified_X[:, 1].min() - 1, misclassified_X[:, 1].max() + 1  # 2nd feature
-    # x1_scale = np.arange(min1, max1, 10.0)
-    # x2_scale = np.arange(min2, max2, 10.0)
-    # x_grid, y_grid = np.meshgrid(x1_scale, x2_scale)
-    # # flatten each grid to a vector
-    # x_g, y_g = x_grid.flatten(), y_grid.flatten()
-    # x_g, y_g = x_g.reshape((len(x_g), 1)), y_g.reshape((len(y_g), 1))
-    # # xx, yy = np.meshgrid(np.linspace(-3, 3, 200), np.linspace(-3, 3, 200))
-    #
-    # grid = np.hstack((x_g, y_g))
-    #
-    # # make predictions for the grid
-    # svm_rbf = svm.SVC(kernel='rbf', C=1.0, gamma=1.0, decision_function_shape='ovo')
-    # svm_rbf.fit(_x_train, _y_train)
-    #
-    #
-    # # reshape the predictions back into a grid
-    # zz = yhat.reshape(x_grid.shape)
-    # # plot the grid of x, y and z values as a surface
-    # plt.contourf(x_grid, y_grid, zz, cmap='Paired')
-    # # create scatter plot for samples from each class
-    # for class_value in range(2):
-    #     # get row indexes for samples with this class
-    #     row_ix = np.where(misclassified_y == class_value)
-    #     # create scatter of these samples
-    #     plt.scatter(misclassified_X[row_ix, 0], misclassified_X[row_ix, 1], cmap='Paired')
-    # # show the plot
-    # plt.title("Decision surfaces of the SVM with RBF kernel")
+    # plt.subplots_adjust(left=.2, right=0.95, bottom=0.15, top=0.95)
+    # plt.imshow(scores, interpolation='nearest', cmap=plt.cm.hot)
+    # plt.xlabel('gamma')
+    # plt.ylabel('C')
+    # plt.colorbar()
+    # plt.xticks(np.arange(len(gamma_range)), gamma_range, rotation=45)
+    # plt.yticks(np.arange(len(C_range)), C_range)
+    # plt.title('Validation accuracy')
     # plt.show()
 
-    # Apply SVM with RBF kernel for missclassified data
+    # Visualization of RBF decision surfaces
+    svm_rbf = svm.SVC(kernel='rbf', C=1.0, gamma=0.1, decision_function_shape='ovo')
+    svm_rbf.fit(_x_train, _y_train)
+    # title = "SVM with RBF kernel decision surfaces"
+    # plot_decision_regions(misclassified_X, misclassified_y, svm_rbf, title=title)
+    # plt.legend(loc='upper left')
+    # plt.tight_layout()
+    # plt.show()
+
+    # polynomial_degree_range = [1, 3, 5, 6]
+    # # gamma = [ 0.01, 0.1, 1.0, 100.0 ]
+    # accuracy_table = pd.DataFrame(columns=['degree', 'Accuracy'])
+    # # accuracy_table = pd.DataFrame(columns=['gamma', 'Accuracy'])
+    # accuracy_table['Degree'] = polynomial_degree_range
+    #
+    # plt.figure(figsize=(10, 10))
+    #
+    # j = 0
+    #
+    # for i in polynomial_degree_range:
+    #     # Apply SVM model to training data
+    #     svm_poly = svm.SVC(kernel='poly', degree=i, C=1.0, random_state=0)
+    #     svm_poly.fit(_x_train, _y_train)
+    #
+    #     # Predict using model
+    #     y_pred_ = svm_poly.predict(_x_test)
+    #
+    #     # Saving accuracy score in table
+    #     accuracy_table.iloc[j, 1] = accuracy_score(_y_test, y_pred_)
+    #     j += 1
+    #
+    #     title = 'SVM with polynomial Kernel using degree =' + str(i)
+    #     # Printing decision regions
+    #     plt.subplot(3, 2, j)
+    #     plt.subplots_adjust(hspace=0.4)
+    #     plot_decision_regions(misclassified_X
+    #                           , misclassified_y
+    #                           , svm_poly, title
+    #                           )
+    #
+    #     plt.title('SVM with polynomial Kernel using degree = %s' % i)
+    #
+    # print(accuracy_table)
+
+    degree_range = [0.01, 0.5, 0.1, 1.0, 10.0, 100.0]
+
+    acc_table = pd.DataFrame(columns=['degree', 'Accuracy'])
+    acc_table['degree'] = degree_range
+
+    plt.figure(figsize=(10, 10))
+
+    j = 0
+
+    for i in degree_range:
+        # Apply SVM model to training data
+        svm_rbf_clf = svm.SVC(kernel='rbf', C=i, random_state=0)
+        svm_rbf_clf.fit(_x_train, _y_train)
+
+        # Predict using model
+        y_pred_ = svm_rbf_clf.predict(_x_test)
+
+        # Saving accuracy score in table
+        acc_table.iloc[j, 1] = accuracy_score(_y_test, y_pred_)
+        j += 1
+
+        # Printing decision regions
+        plt.subplot(3, 2, j)
+        plt.subplots_adjust(hspace=0.4)
+        plot_decision_regions(X=misclassified_X
+                              , y=misclassified_y
+                              , classifier=svm_rbf_clf
+                              )
+
+        plt.title('RBF Kernel using C = %s' % i)
+
+    print(acc_table)
+
+    # Apply SVM for missclassified data
     _y_pred = svm_rbf.predict(_x_test)
 
     print("\n ************ Print test metrics ************ \n")
@@ -758,10 +783,13 @@ if __name__ == "__main__":
     plt.show()
 
 
+    # Split and shuffle data to create proper train and validation sets
+    # with instances from both classes
+    # VAE is trained only on clean data and thus mse_train_val came only from clean data
+
     # mse_all_data, y_all, mse_train_data, y_train_, mse_test_data, y_test_ = \
     #                         splitting_sets(mse_train_val, mse_test, train_y, val_y, test_y)
-
-    # Plot decision boundary
+    # Plot decision boundary for different classifiers
     # plot_decision_boundary(mse_train_data, y_train_, mse_test_data, y_test_)
     # check_overfitting(mse_train_data, y_train_, mse_test_data, y_test_)
 

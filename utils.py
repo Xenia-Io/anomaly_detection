@@ -353,6 +353,9 @@ class SequenceIterator:
         except KeyError:
             return 0
 
+    def idx2word(self, word_model, idx):
+        return word_model.wv.index2word[idx]
+
     def __iter__(self):
         i=0
         for news, cat in zip(self.dataset.iloc[:, 0], self.dataset.iloc[:, 1]):

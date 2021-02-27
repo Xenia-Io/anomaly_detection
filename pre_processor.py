@@ -164,7 +164,6 @@ class Preprocessor():
         else:
             raise NotImplementedError('Function only supports json files!')
 
-
     def load_data(self, log_file, train_ratio=0.7, \
                   split_type='sequential', save_csv=False, printing=False):
         """ Load the logs into train and test data
@@ -217,7 +216,7 @@ class Preprocessor():
                 print("data_df: ", (data_df))
 
             # Split train and test data - Shuffle train data
-            (x_train, _), (x_test, _) = self._split_data(x_data, train_ratio=train_ratio, split_type=split_type)
+            (x_train, _), (x_test, _) = self._split_data(x_data, train_ratio=train_ratio)
             print('Total: {} instances, train: {} instances, test: {} instances'.format(
                 x_data.shape[0], x_train.shape[0], x_test.shape[0]))
 
