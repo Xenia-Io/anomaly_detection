@@ -1,9 +1,7 @@
 from tensorflow.keras.preprocessing.sequence import pad_sequences
-from pre_processor import Preprocessor
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
-from pandas import DataFrame
 import multiprocessing
 from time import time
 from umap import UMAP
@@ -23,8 +21,6 @@ def visualise_data(set_x, set_x_test, set_y, set_y_test, tsne=False, pca=False, 
     visual_dict = {'messages': list(visualisation_initial), 'labels': list(visual_initial_y)}
 
     visual_df = pd.DataFrame(visual_dict, columns=['messages', 'labels'])
-    # print("Debug : ", visualisation_initial.shape, visual_initial_y.shape)
-    # print(visual_df)
 
     # isolate features from labels
     features, labels = visual_df.drop('labels', axis=1).values, visual_df.labels.values
@@ -263,8 +259,6 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
     set_x = []
     set_y = []
     for w, c in sequences_train:
-        # print("w = ", w)
-        # print("c = ", c)
         set_x.append(w)
         set_y.append(cat_dict[c])
 
@@ -289,11 +283,9 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
     total_samples_test = df_copy_test.shape[0]
     n_val = int(VALID_PER * total_samples)
     n_train = total_samples - n_val
-    # n_train = 200
     n_test = df_copy_test.shape[0]
 
     random_i = random.sample(range(total_samples), total_samples)
-    # random_j = random.sample(range(total_samples_test), total_samples_test)
     print("df_copy_train.shape: ", df_copy_train.shape) # (7006, 4)
 
     train_x = set_x[random_i[:n_train]]
@@ -302,7 +294,6 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
     val_y = set_y[random_i[n_train:]]
     test_x = set_x_test[:n_test]
     test_y = set_y_test[:n_test]
-
 
     print("Train Shapes - X: {} - Y: {}".format(train_x.shape, train_y.shape))
     print("Val Shapes - X: {} - Y: {}".format(val_x.shape, val_y.shape))

@@ -1,7 +1,6 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
 import pandas as pd
 
-
 class FeatureExtractor():
 
     def __init__(self, analyzer = 'word'):
@@ -32,7 +31,6 @@ class FeatureExtractor():
         df_countvect = pd.DataFrame(data=count_wm.toarray(), columns=count_tokens)
 
         print(".Count Vectorizer results.\n")
-        print("Tokens: ", count_tokens)
         print(df_countvect)
 
         # Print the vector representation for a log message (print 1 row from df)

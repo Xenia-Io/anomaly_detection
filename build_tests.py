@@ -1,20 +1,14 @@
 from sklearn.metrics import calinski_harabasz_score, silhouette_score, silhouette_samples, davies_bouldin_score
 from sklearn_extensions.fuzzy_kmeans import KMedians
-from sklearn.datasets import make_moons, make_blobs
-from mpl_toolkits.axes_grid1 import host_subplot
 from sklearn.covariance import EllipticEnvelope
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.ensemble import IsolationForest
 from pre_processor import Preprocessor
-from sklearn.decomposition import PCA
-import mpl_toolkits.axisartist as AA
 from sklearn.cluster import KMeans
-from sklearn.manifold import TSNE
 from feature_extractor import *
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from sklearn import svm
-from umap import UMAP
 import numpy as np
 import time
 
@@ -113,9 +107,7 @@ class Tester():
         # build dataframe from all data points in the given dataset
         x_all_array = np.asarray(preprocessor.x_all)
         df = pd.DataFrame({'x0': x_all_array[:, 0], 'x1': x_all_array[:, 1]})
-        print("debug *** df : ", (df))
         to_model_columns = df.columns[0:2]
-        print("to_model_columns: ", to_model_columns)
 
         # Build, train and test Classifier
         clf = IsolationForest(contamination=0.03, n_estimators=100, warm_start=True, max_samples=100)
@@ -137,7 +129,6 @@ class Tester():
         df['anomaly'] = pred
         outliers = df.loc[df['anomaly'] == -1]
         outlier_index = list(outliers.index)
-        print(outlier_index)
 
         # Find the number of anomalies and normal points (points classified -1 are anomalous)
         print(df['anomaly'].value_counts())
