@@ -31,15 +31,14 @@ class Preprocessor():
             (self.x_train, self.y_train), (self.x_test, self.y_test), self.df = self.load_data(filename)
             self.x_all = np.concatenate((self.x_train, self.x_test), axis=0)
             self.x_all_trans_no_pca = []
-            self.x_all_median = []
 
 
     def preprocessing(self, pca=False, tsne=False, umap=False, printing=False):
 
         feature_extractor = FeatureExtractor()
-        self.x_all = feature_extractor.fit_transform(self.x_all, term_weighting='tf-idf')
-        self.x_train = feature_extractor.fit_transform(self.x_train, term_weighting='tf-idf')
-        self.x_test = feature_extractor.transform(np.array(self.x_test))
+        self.x_all = feature_extractor.fit_transform(self.x_all)
+        self.x_train = feature_extractor.fit_transform(self.x_train)
+        self.x_test = feature_extractor.fit_transform(self.x_test)
         self.x_all_trans_no_pca = np.copy(self.x_all)
 
         if printing:
@@ -113,7 +112,6 @@ class Preprocessor():
                 dict_of_lists = {}
                 messages = []
                 labels = []
-
                 for item in range(len(data)):
                     labels.append(data[item]['_source']['severity'])
                     messages.append(data[item]['_source']['message'])
@@ -122,11 +120,13 @@ class Preprocessor():
 
             # Build the dataframe
             df = pd.DataFrame(dict_of_lists, columns=['messages', 'labels'])
+            print("XENIA :", df['labels'].value_counts())
 
             # Clean the messages from numbers and unwanted characters
             x_data = df['messages'].values
             for i in range(x_data.shape[0]):
                 x_data[i] = re.sub("[\(\[].*?[\)\]]", "", x_data[i])
+                x_data[i] = re.sub("[!?',;.=:+#\-*^(<>)_/|\"\]]", " ", x_data[i])
                 x_data[i] = ''.join([i for i in x_data[i] if not i.isdigit()])
             df['messages'] = x_data
 
@@ -191,8 +191,8 @@ class Preprocessor():
 
                 # construct list of '_sources'
                 sources_list = []
-                for item in range(len(data['responses'][0]['hits']['hits'])):
-                    sources_list.append(data['responses'][0]['hits']['hits'][item]['_source'])
+                for item in range(len(data)):
+                    sources_list.append(data[item]['_source'])
 
             # Build my dataframe
             data_df = pd.DataFrame(sources_list)
@@ -202,6 +202,7 @@ class Preprocessor():
             for i in range(x_data.shape[0]):
                 # print(i, x_data[i])
                 x_data[i] = re.sub("[\(\[].*?[\)\]]", "", x_data[i])
+                x_data[i] = re.sub("[!?',;.=:+#\-*^(<>)_/|\"\]]", " ", x_data[i])
                 x_data[i] = ''.join([i for i in x_data[i] if not i.isdigit()])
                 # print(i, x_data[i])
 
@@ -235,12 +236,7 @@ class Preprocessor():
             raise NotImplementedError('load_data() only support json files!')
 
 
-    def _split_data(self, x_data, y_data=None, train_ratio=0.7):
-        # Random shuffle
-        indexes = shuffle(np.arange(x_data.shape[0]))
-        x_data = x_data[indexes]
-        if y_data is not None:
-            y_data = y_data[indexes]
+    def _split_data(self, x_data, y_data=None, train_ratio=0.7, split_type='uniform'):
 
         num_train = int(train_ratio * x_data.shape[0])
         x_train = x_data[0:num_train]

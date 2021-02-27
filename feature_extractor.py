@@ -1,124 +1,49 @@
+from sklearn.feature_extraction.text import TfidfVectorizer
 import pandas as pd
-import numpy as np
-from collections import Counter
-from scipy.special import expit
 
 
 class FeatureExtractor():
 
-    def __init__(self):
-        self.idf_vec = None
-        self.mean_vec = None
-        self.events = None
-        self.term_weighting = None
-        self.normalization = None
+    def __init__(self, analyzer = 'word'):
+        self.analyzer = analyzer
 
 
-    def fit_transform(self, X_seq, term_weighting=None, normalization=None, printing=False):
-        """ Fit and transform the data matrix
+    def fit_transform(self, X_seq):
+        """ Fit and transform the dataset matrix - create feature vector representations
         Arguments
         ---------
             X_seq: ndarray, log sequences matrix
-            term_weighting: None or `tf-idf`
-            normalization: None or `zero-mean`
 
         Returns
         -------
             X_new: The transformed data matrix
         """
         print('\n====== Transformed data summary ======')
-        self.term_weighting = term_weighting
-        self.normalization = normalization
 
-        X_counts = []
+        # Instantiate the vectorizer object
+        vectorizer = TfidfVectorizer(analyzer= self.analyzer)
 
-        if printing:
-            print("Shape of X_seq: ", X_seq.shape)
-            print("len(X_seq): ", len(X_seq))
+        # Create tokens from all dataset matrix
+        count_wm = vectorizer.fit_transform(X_seq)
+        count_tokens = vectorizer.get_feature_names()
 
-        for i in range(len(X_seq)):
-            event_counts = Counter(X_seq[i])
-            X_counts.append(event_counts)
-            if printing:
-                print("X_seq[",i,"]: ", X_seq[i])
-                print("length of event_counts: ", len(event_counts))
-                print("event_counts: ", event_counts)
+        # DF: [100000 rows x 801 columns] (for dataset1 = 100K)
+        # [each row = 1 log message] , [each column = 1 word]
+        df_countvect = pd.DataFrame(data=count_wm.toarray(), columns=count_tokens)
 
-        if printing:
-            print("Length of X_counts: ", len(X_counts))
+        print(".Count Vectorizer results.\n")
+        print("Tokens: ", count_tokens)
+        print(df_countvect)
 
-        X_df = pd.DataFrame(X_counts)
-        X_df = X_df.fillna(0)
-        self.events = X_df.columns
-        X = X_df.values
+        # Print the vector representation for a log message (print 1 row from df)
+        print(df_countvect.loc[[20500]])
 
-        # print("X_df.columns: ", X_df.columns)
-        # print("X_df values: ", X_df.values)
-        num_instance, num_event = X.shape
+        # Get the first position of the maximum value for each word
+        m = df_countvect.ne(0).idxmax()
+        df = pd.DataFrame(dict(pos=m, val=df_countvect.lookup(m, m.index)))
+        print(df)
 
-        if printing:
-            print("num of instances: ", num_instance, " and num of events: ", num_event)
-            print("Shape of X: ", X.shape)
+        print('All data shape: {}-by-{}\n'.format(df_countvect.shape[0], df_countvect.shape[1]))
 
-
-        if self.term_weighting == 'tf-idf':
-            df_vec = np.sum(X>0, axis=0) # axis = 0 are for columns
-
-            if printing:
-                print("df_vec: ", df_vec)
-                print("shape of df_vec: ", df_vec.shape)
-            self.idf_vec = np.log(num_instance / (df_vec + 1e-8))
-
-            if printing:
-                print("Shape of idf_vec: ", self.idf_vec.shape)
-                print("np.tile shape: ", np.tile(self.idf_vec, (num_instance, 1)).shape)
-
-            idf_matrix = X * np.tile(self.idf_vec, (num_instance, 1))
-            X = idf_matrix
-        if self.normalization == 'zero-mean':
-            mean_vec = X.mean(axis=0)
-            self.mean_vec = mean_vec.reshape(1, num_event)
-            X = X - np.tile(self.mean_vec, (num_instance, 1))
-        elif self.normalization == 'sigmoid':
-            X[X != 0] = expit(X[X != 0])
-        X_new = X
-
-        print('Train data shape: {}-by-{}\n'.format(X_new.shape[0], X_new.shape[1]))
-        return X_new
-
-
-    def transform(self, X_seq):
-        """ Transform the data matrix with trained parameters
-        Arguments
-        ---------
-            X: log sequences matrix
-            term_weighting: None or `tf-idf`
-        Returns
-        -------
-            X_new: The transformed data matrix
-        """
-        print('====== Transformed test data summary ======')
-        X_counts = []
-        for i in range(X_seq.shape[0]):
-            event_counts = Counter(X_seq[i])
-            X_counts.append(event_counts)
-        X_df = pd.DataFrame(X_counts)
-        X_df = X_df.fillna(0)
-        empty_events = set(self.events) - set(X_df.columns)
-        for event in empty_events:
-            X_df[event] = [0] * len(X_df)
-        X = X_df[self.events].values
-
-        num_instance, num_event = X.shape
-        if self.term_weighting == 'tf-idf':
-            idf_matrix = X * np.tile(self.idf_vec, (num_instance, 1))
-            X = idf_matrix
-        if self.normalization == 'zero-mean':
-            X = X - np.tile(self.mean_vec, (num_instance, 1))
-        elif self.normalization == 'sigmoid':
-            X[X != 0] = expit(X[X != 0])
-        X_new = X
-
-        print('Test data shape: {}-by-{}\n'.format(X_new.shape[0], X_new.shape[1]))
-
+        X_new = df_countvect
         return X_new

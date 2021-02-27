@@ -6,12 +6,16 @@ from sklearn.covariance import EllipticEnvelope
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.ensemble import IsolationForest
 from pre_processor import Preprocessor
+from sklearn.decomposition import PCA
 import mpl_toolkits.axisartist as AA
 from sklearn.cluster import KMeans
+from sklearn.manifold import TSNE
 from feature_extractor import *
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from sklearn import svm
+from umap import UMAP
+import numpy as np
 import time
 
 
@@ -28,7 +32,7 @@ class Tester():
     def comparisons(self):
 
         preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
-        preprocessor.preprocessing(pca=True)
+        preprocessor.preprocessing(umap=True)
         print("x_all shape passed in: ", preprocessor.x_all.shape)
 
         # Settings
@@ -51,16 +55,16 @@ class Tester():
         # Compare given classifiers under given settings
         x_min, x_max = preprocessor.x_all[:, 1].min() - 1, preprocessor.x_all[:, 1].max() + 1
         y_min, y_max = preprocessor.x_all[:, 0].min() - 1, preprocessor.x_all[:, 0].max() + 1
-        xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),
-                             np.arange(y_min, y_max, 0.1))
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.2),
+                             np.arange(y_min, y_max, 0.2))
 
-        plt.figure(figsize=(len(anomaly_algorithms) * 2 + 3, 12.5))
-        plt.subplots_adjust(left=.02, right=.98, bottom=.001, top=.96, wspace=.05,
-                            hspace=.01)
+        # plt.figure(figsize=(len(anomaly_algorithms) * 3 + 5, 12.5))
+        plt.figure(figsize=(2, 2))
+        # plt.subplots_adjust(left=.02, right=.98, bottom=.001, top=.96, wspace=.05,
+        #                     hspace=.01)
 
         plot_num = 1
         rng = np.random.RandomState(42)
-
 
         # Add outliers
         # X = np.concatenate([preprocessor.x_all, rng.uniform(low=-6, high=6,
@@ -70,7 +74,7 @@ class Tester():
             t0 = time.time()
             model.fit(X)
             t1 = time.time()
-            plt.subplot(1, len(anomaly_algorithms), plot_num)
+            plt.subplot(2, 2, plot_num)
             plt.title(name, size=14)
 
             # fit the data and tag outliers
@@ -89,14 +93,72 @@ class Tester():
             colors = np.array(['#377eb8', '#ff7f00'])
             plt.scatter(X[:, 0], X[:, 1], s=10, color=colors[(y_pred + 1) // 2])
 
-            plt.xlim(-5, 5)
-            plt.ylim(-5, 5)
+            plt.xlim(x_min, x_max)
+            plt.ylim(y_min, y_max)
             plt.xticks(())
             plt.yticks(())
             plt.text(.99, .01, ('%.2fs' % (t1 - t0)).lstrip('0'),
                      transform=plt.gca().transAxes, size=15,
                      horizontalalignment='right')
             plot_num += 1
+
+        plt.show()
+
+    def run_isoForest_version2(self, umap=False, tsne=False, pca=False):
+
+        # Data preprocessing
+        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
+        preprocessor.preprocessing(umap=umap, tsne=tsne, pca=pca)
+
+        # build dataframe from all data points in the given dataset
+        x_all_array = np.asarray(preprocessor.x_all)
+        df = pd.DataFrame({'x0': x_all_array[:, 0], 'x1': x_all_array[:, 1]})
+        print("debug *** df : ", (df))
+        to_model_columns = df.columns[0:2]
+        print("to_model_columns: ", to_model_columns)
+
+        # Build, train and test Classifier
+        clf = IsolationForest(contamination=0.03, n_estimators=100, warm_start=True, max_samples=100)
+        clf.fit(df[to_model_columns])
+        pred = clf.predict(df[to_model_columns])
+
+        cluster_labels = clf.fit_predict(df[to_model_columns])
+
+        # The silhouette_score gives the average value for all the samples.
+        # This gives a perspective into the density and separation of the formed clusters
+        silhouette_avg = silhouette_score(list(df[to_model_columns].values), cluster_labels)
+        ch_score = calinski_harabasz_score(list(df[to_model_columns].values), cluster_labels)
+        db_score = davies_bouldin_score(list(df[to_model_columns].values), cluster_labels)
+        print("The average silhouette_score is :", silhouette_avg)
+        print("The average calinski_harabasz_score is: ", ch_score)
+        print("The average davies_bouldin_score is: ", db_score)
+
+        # Find outliers
+        df['anomaly'] = pred
+        outliers = df.loc[df['anomaly'] == -1]
+        outlier_index = list(outliers.index)
+        print(outlier_index)
+
+        # Find the number of anomalies and normal points (points classified -1 are anomalous)
+        print(df['anomaly'].value_counts())
+
+        # Plot predictions of the model
+        fig, ax = plt.subplots(figsize=(8, 8))
+
+        # plotting data
+        ax.scatter(df.iloc[:, 0], df.iloc[:, 1], c='green',
+                         s=20, label="normal points")
+        ax.scatter(df.iloc[outlier_index, 0], df.iloc[outlier_index, 1], c='green', s=20, edgecolor="red",
+                         label="predicted outliers")
+
+        # storing it to be displayed later
+        plt.legend(loc='best')
+        if pca:
+            plt.title('Outliers prediction for clean and fraud instances using PCA')
+        elif tsne:
+            plt.title('Outliers prediction for clean and fraud instances using TSNE')
+        else:
+            plt.title('Outliers prediction for clean and fraud instances using UMAP')
 
         plt.show()
 
@@ -108,7 +170,6 @@ class Tester():
         """
         preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
         preprocessor.preprocessing(pca=True)
-
         print("x_all shape passed in iForest model: ", preprocessor.x_all.shape)
 
         print('Starting fitting Isolation Forests')
@@ -122,8 +183,10 @@ class Tester():
         # or less spherical and compact in their middle
         # the higher, the better
         ch_score = calinski_harabasz_score(preprocessor.x_all, cluster_labels)
+        db_score = davies_bouldin_score(preprocessor.x_all, cluster_labels)
         print("The average silhouette_score is :", silhouette_avg)
         print("The average calinski_harabasz_score is: ", ch_score)
+        print("The average davies_bouldin_score is: ", db_score)
 
         # Compute the silhouette scores for each sample: shape=(350,)
         sample_silhouette_values = silhouette_samples(preprocessor.x_all, cluster_labels)
@@ -155,11 +218,10 @@ class Tester():
                    loc="lower right")
         plt.show()
 
-
     def run_kMedians(self):
         print('Starting fitting K-Medians model')
         preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
-        preprocessor.preprocessing(umap=True)
+        preprocessor.preprocessing(pca=True)
         print("preprocessor.x_all.shape : ", preprocessor.x_all.shape)
 
         # Use silhouette score
@@ -195,10 +257,9 @@ class Tester():
             ch_score.append(round(calinski_harabasz_score(preprocessor.x_all, cluster_labels), 2))
             davies_bouldin_scores.append(round(davies_bouldin_score(preprocessor.x_all, cluster_labels), 2))
 
-            print("For n_clusters =", n_clusters,
-                  "The average silhouette_score is :", silhouette_scores)
-            print("For n_clusters =", n_clusters,
-                  "The average calinski_harabasz score is :", ch_score)
+            print("Till n =", n_clusters," the silhouette score list is :", silhouette_scores)
+            print("Till n =", n_clusters," the average calinski_harabasz score list is :", ch_score)
+            print("Till n =", n_clusters," the average davies_bouldin score list is:", davies_bouldin_scores)
 
             # Compute the silhouette scores for each sample
             sample_silhouette_values = silhouette_samples(preprocessor.x_all, cluster_labels)
@@ -255,11 +316,15 @@ class Tester():
             ax2.set_xlabel("Feature space for the 1st feature")
             ax2.set_ylabel("Feature space for the 2nd feature")
 
-            plt.suptitle(("Silhouette analysis for KMeans clustering on sample data "
+            plt.suptitle(("Silhouette analysis for KMedians clustering on sample data "
                           "with n_clusters = %d" % n_clusters),
                          fontsize=14, fontweight='bold')
 
-        plt.show()
+        print("The silhouette scores are :", silhouette_scores)
+        print("The calinski_harabasz scores are :", ch_score)
+        print("The davies_bouldin scores are :", davies_bouldin_scores)
+
+        # plt.show()
 
         self.compare_scores(silhouette_scores, ch_score, davies_bouldin_scores, range_n_clusters)
 
@@ -378,7 +443,7 @@ class Tester():
 
         par2.spines["right"].set_position(("axes", 1.2))
 
-        y_min, y_max = min(silhouette_scores) - 1, max(silhouette_scores) + 1
+        y_min, y_max = min(silhouette_scores) - 1, max(silhouette_scores) + 3
         host.set_xlim(range_n_clusters[0], range_n_clusters[-1])
         host.set_ylim(y_min, y_max)
 

@@ -162,8 +162,12 @@ def build_NLP_model(messages):
 
     t = time()
 
-    w2v_model.train(messages, total_examples=w2v_model.corpus_count, epochs=10)
+    w2v_model.train(messages, total_examples=w2v_model.corpus_count, epochs=10, compute_loss=True)
     print('Time to train the model: {} mins'.format(round((time() - t) / 60, 2)))
+
+    # getting the training loss value
+    training_loss = w2v_model.get_latest_training_loss()
+    print("training_loss of word2vec: ", training_loss)
 
     cores = multiprocessing.cpu_count()
     print("Number of CPUs:", cores)
@@ -176,22 +180,51 @@ def build_NLP_model(messages):
 
     print('Result embedding shape:', pretrained_weights.shape)
     print("Vocabulary Size: {} - Embedding Dim: {}".format(vocab_size, emdedding_size))
-    # print("Vocabulary: ", w2v_model.wv.vocab.keys())
+    print("Vocabulary: ", w2v_model.wv.vocab.keys())
 
     return w2v_model, pretrained_weights, vocab_size, emdedding_size
 
 
 def test_NLP_model(model):
     # Test w2v_model
-    w1 = ["servers"]
+    w1 = ["alarm"]
     print(model.wv.most_similar(positive=w1, topn=6))
-    print(model.wv.similarity(w1, "no"))
-    print(model.wv.similarity(w1, "reachable"))
-    print(model.wv.similarity(w1, "alarm"))
+    print(model.wv.similarity(w1, "set"))
+    print(model.wv.similarity(w1, "cleared"))
+    print(model.wv.similarity(w1, "unreachable"))
+    print(model.wv.similarity(w1, "class"))
+
+    w1 = ["server"]
+    print(model.wv.most_similar(positive=w1, topn=6))
+    print(model.wv.similarity(w1, "set"))
+    print(model.wv.similarity(w1, "cleared"))
+    print(model.wv.similarity(w1, "unreachable"))
+    print(model.wv.similarity(w1, "class"))
+
+    w1 = ["license"]
+    print(model.wv.most_similar(positive=w1, topn=6))
+    print(model.wv.similarity(w1, "set"))
+    print(model.wv.similarity(w1, "cleared"))
+    print(model.wv.similarity(w1, "unreachable"))
+    print(model.wv.similarity(w1, "class"))
+
+    w1 = ["chassis"]
+    print(model.wv.most_similar(positive=w1, topn=6))
+    print(model.wv.similarity(w1, "set"))
+    print(model.wv.similarity(w1, "cleared"))
+    print(model.wv.similarity(w1, "unreachable"))
+    print(model.wv.similarity(w1, "class"))
+
+    w1 = ["class"]
+    print(model.wv.most_similar(positive=w1, topn=6))
+    print(model.wv.similarity(w1, "set"))
+    print(model.wv.similarity(w1, "cleared"))
+    print(model.wv.similarity(w1, "unreachable"))
+    print(model.wv.similarity(w1, "class"))
 
 
 def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
-    print('\nPreparing the data for Deep Learning models...')
+    print('\nPreparing the data for DL models...')
     DROP_THRESHOLD = 1
 
     # splitting by class
@@ -230,6 +263,8 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
     set_x = []
     set_y = []
     for w, c in sequences_train:
+        # print("w = ", w)
+        # print("c = ", c)
         set_x.append(w)
         set_y.append(cat_dict[c])
 
@@ -251,16 +286,20 @@ def prepare_data(preprocessor, df_copy, w2v_model, maxlen = 64, is_LSTM=False):
     VALID_PER = 0.15  # Percentage of the whole set that will be separated for validation
 
     total_samples = df_copy_train.shape[0]
+    total_samples_test = df_copy_test.shape[0]
     n_val = int(VALID_PER * total_samples)
     n_train = total_samples - n_val
+    # n_train = 200
     n_test = df_copy_test.shape[0]
 
-    shuffled_indeces = random.sample(range(total_samples), total_samples)
+    random_i = random.sample(range(total_samples), total_samples)
+    # random_j = random.sample(range(total_samples_test), total_samples_test)
+    print("df_copy_train.shape: ", df_copy_train.shape) # (7006, 4)
 
-    train_x = set_x[shuffled_indeces[:n_train]]
-    train_y = set_y[shuffled_indeces[:n_train]]
-    val_x = set_x[shuffled_indeces[n_train:]]
-    val_y = set_y[shuffled_indeces[n_train:]]
+    train_x = set_x[random_i[:n_train]]
+    train_y = set_y[random_i[:n_train]]
+    val_x = set_x[random_i[n_train:]]
+    val_y = set_y[random_i[n_train:]]
     test_x = set_x_test[:n_test]
     test_y = set_y_test[:n_test]
 

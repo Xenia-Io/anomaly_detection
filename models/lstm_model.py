@@ -2,6 +2,8 @@ from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Acti
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from kerastuner.engine.hyperparameters import HyperParameters
 from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.metrics import classification_report
 from sklearn.metrics import roc_curve, auc
 import tensorflow.keras.backend as K
 from kerastuner import HyperModel
@@ -9,10 +11,10 @@ from sklearn import metrics
 import kerastuner as kt
 import tensorflow as tf
 import seaborn as sns
-from utils import *
 import pandas as pd
 import numpy as np
 import gensim
+from utils import *
 
 from sklearn.metrics import classification_report, confusion_matrix
 
@@ -21,13 +23,13 @@ sns.set(style='whitegrid', context='notebook')
 
 class LSTM_Model(HyperModel):
 
-    def __init__(self, pretrained_weights, epochs=6, optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,
+    def __init__(self, pretrained_weights, vocab_size, epochs=15, optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,
                  epsilon=0, w_decay=0, momentum=0, dropout=0, embed_size=300, max_features=10000, maxlen=200):
         """
         Credits to: https://gist.github.com/maxim5/c35ef2238ae708ccb0e55624e9e0252b
         """
         super().__init__()
-        self.optimizer = optimizer
+        # self.optimizer = optimizer
         self.batch_size = batch_size
         self.epochs = epochs
         self.loss = loss
@@ -41,7 +43,7 @@ class LSTM_Model(HyperModel):
         self.max_features = max_features  # how many unique words to use (i.e num rows in embedding vector)
         self.maxlen = maxlen  # max number of words in a log message to use
         self.emdedding_size = 64
-        self.vocab_size = 55
+        self.vocab_size = vocab_size
         self.pretrained_weights = pretrained_weights
 
 
@@ -87,8 +89,11 @@ class LSTM_Model(HyperModel):
         model.add(Dense(units=2))
         model.add(Activation('softmax'))
 
-        hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
-        optimizer = hp.Choice('optimizer', ['adam', 'rmsprop', 'sgd', 'adagrad', 'adadelta'])
+        # hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-5, 1e-4])
+        hp.Choice('learning_rate', values=[1e-3, 1e-4])
+        # optimizer = hp.Choice('optimizer', ['adam', 'adagrad', 'sgd', 'rmsprop', 'adadelta'])
+        optimizer = hp.Choice('optimizer', ['adam'])
+
         model.compile(optimizer, loss='binary_crossentropy', metrics=['acc', f1_m, precision_m, recall_m])
 
         return model
@@ -138,12 +143,15 @@ class LSTM_Model(HyperModel):
 
 
 if __name__ == "__main__":
+    print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
     print("tf version: ", tf.__version__)
     print("tf.keras version: ", tf.keras.__version__)
 
     # Preprocessing the dataset
-    preprocessor = Preprocessor('./data/big_dataset.json', True, visualize=False)
-    df = preprocessor.load_data_supervised('./data/big_dataset.json')
+    # preprocessor = Preprocessor('../data/dataset2.json', True, visualize=False)
+    # df = preprocessor.load_data_supervised('../data/dataset2.json')
+    preprocessor = Preprocessor('../data/dataset2.json', True, visualize=False)
+    df = preprocessor.load_data_supervised('../data/dataset2.json')
     df_copy = df.copy()
     messages = df['messages'].values
 
@@ -154,26 +162,26 @@ if __name__ == "__main__":
         # print("i: ", i, " with message: ", messages[i])
 
     w2v_model, pretrained_weights, vocab_size, emdedding_size = build_NLP_model(messages)
-    test_NLP_model(w2v_model)
+    # test_NLP_model(w2v_model)
 
     # Data preparation for feeding the network
     set_x, set_x_test, set_y, set_y_test, train_x, train_y, val_x, \
     val_y, test_x, test_y = prepare_data(preprocessor, df_copy, w2v_model, is_LSTM=True)
 
     # Compile model
-    lstm = LSTM_Model(pretrained_weights)
+    lstm = LSTM_Model(pretrained_weights, vocab_size)
     # model_ = lstm.build_lstm(train_x, vocab_size, emdedding_size, pretrained_weights)
 
     # tuner = kt.tuners.RandomSearch(
     #     lstm,
     #     objective='val_loss',
-    #     max_trials=20,
+    #     max_trials=4,
     #     directory='my_dir')
 
     tuner = kt.tuners.Hyperband(
         lstm,
         objective='val_loss',
-        max_epochs=5,
+        max_epochs=2,
         directory='my_dir')
 
     # tuner = kt.tuners.BayesianOptimization(
@@ -192,13 +200,14 @@ if __name__ == "__main__":
 
     tuner.search(train_x, train_y_onehot,
                  validation_data=(val_x, val_y_onehot),
-                 epochs=5)
+                 epochs=2)
 
     best_model = tuner.get_best_models(1)[0]
     best_hyperparameters = tuner.get_best_hyperparameters(1)[0]
     print("Tuner summary: ", tuner.results_summary())
-    print("Best trial: ", tuner.oracle.get_best_trials(num_trials=1)[0].hyperparameters.values)
+    print("Best trial: ", tuner.oracle.get_best_trials(num_trials=2)[0].hyperparameters.values)
 
+    print("Best model summary:")
     best_model.summary()
     print("best optimizer : ", best_hyperparameters.get('optimizer'))
     print("best learning_rate: ", best_hyperparameters.get('learning_rate'))
@@ -210,7 +219,8 @@ if __name__ == "__main__":
 
     # dot_img_file = 'model_2_lstm.png'
     # tf.keras.utils.plot_model(model_, to_file=dot_img_file, show_shapes=True)
-
+    # early_stopping = EarlyStopping()
+    print("Sample input : ", train_x[0].shape, train_x[0])
     # Train the model
     history = best_model.fit(
         train_x, train_y_onehot,
@@ -246,6 +256,7 @@ if __name__ == "__main__":
     # print("Testing Accuracy:  {:.4f}".format(accuracy_test))
     # print("Percentage of Test Accuracy: %.2f%%" % (scores[1] * 100))
 
+
     predictions = best_model.predict(test_x)
 
     print("Shape of predictions and test_y: ", predictions.shape, test_y_onehot.shape)
@@ -275,6 +286,12 @@ if __name__ == "__main__":
     print("Recall: ", round(recall*100, 2), "%")
     print("Loss: ", round(loss*100, 2), "%")
     print("Accuracy: ", round(accuracy*100, 2), "%")
+
+    # initialize the label names
+    labelNames = ["clean", "anomalies"]
+    # Classification report
+    print(classification_report(test_y_onehot, predictions,
+                                target_names=labelNames))
 
     test_y = np.argmax(test_y_onehot, axis=-1)  # getting the labels
     y_prediction = np.argmax(predictions, axis=-1)  # getting the confidence of postive class
