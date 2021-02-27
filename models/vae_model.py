@@ -20,6 +20,7 @@ from pre_processor import Preprocessor
 import tensorflow.keras.backend as bck
 import tensorflow_probability as tfp
 from sklearn.tree import plot_tree
+from sklearn.utils import shuffle
 from kerastuner import HyperModel
 from sklearn import metrics, svm
 import plotly.graph_objs as go
@@ -232,8 +233,8 @@ if __name__ == "__main__":
     print(tf.keras.__version__)
 
     # Preprocessing the dataset
-    preprocessor = Preprocessor('../data/dataset_110k.json', True, visualize= False)
-    df = preprocessor.load_data_supervised('../data/dataset_110k.json')
+    preprocessor = Preprocessor('../data/dataset_100k.json', True, visualize= False)
+    df = preprocessor.load_data_supervised('../data/dataset_100k.json')
     df_copy = df.copy()
     messages = df['messages'].values
 
@@ -259,7 +260,7 @@ if __name__ == "__main__":
     # Visualization
     visualise_data(set_x, set_x_test, set_y, set_y_test, tsne=False, pca=False, umap=False)
 
-    checkpoint_path = "training_weights_110k/cp-{epoch:04d}.ckpt"
+    checkpoint_path = "training_weights_100k/cp-{epoch:04d}.ckpt"
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
 
@@ -331,7 +332,7 @@ if __name__ == "__main__":
     # plt.savefig('../plots/01022021/tree_threshold_100k.png')
     # plt.show()
 
-    threshold = 13.2
+    threshold = 915
     mse_test = np.asarray(mse_test)
 
     # Get the indeces of the data with high MSE
@@ -360,6 +361,10 @@ if __name__ == "__main__":
     misclassified_X = arr = np.squeeze(misclassified_X, -2)
     misclassified_y = misclassified_y.reshape(-1,)
     misclassified_X = PCA(n_components=2).fit_transform(misclassified_X)
+    # Random shuffle
+    indexes = shuffle(np.arange(misclassified_X.shape[0]))
+    misclassified_X = misclassified_X[indexes]
+    misclassified_y = misclassified_y[indexes]
     (_x_train, _y_train), (_x_test, _y_test) = preprocessor._split_data(misclassified_X, y_data = misclassified_y)
 
     # Plot missclassified data

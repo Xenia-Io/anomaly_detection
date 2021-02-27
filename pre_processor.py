@@ -235,8 +235,7 @@ class Preprocessor():
             raise NotImplementedError('load_data() only support json files!')
 
 
-    def _split_data(self, x_data, y_data=None, train_ratio=0.7, split_type='uniform'):
-
+    def _split_data(self, x_data, y_data=None, train_ratio=0.7):
         num_train = int(train_ratio * x_data.shape[0])
         x_train = x_data[0:num_train]
         x_test = x_data[num_train:]
