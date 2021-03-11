@@ -100,47 +100,47 @@ class LSTM_Model(HyperModel):
         return model
 
 
-    def word2idx(self, word_model, word):
-        try:
-            return word_model.wv.vocab[word].index
-            # If word is not in index return 0. I realize this means that this
-            # is the same as the word of index 0 (i.e. most frequent word), but 0s
-            # will be padded later anyway by the embedding layer (which also
-            # seems dirty but I couldn't find a better solution right now)
-        except KeyError:
-            return 0
-
-    def idx2word(self, word_model, idx):
-        return word_model.wv.index2word[idx]
-
-
-    def detect_mad_outliers(self, points, threshold=3.5):
-        # calculate the median of the input array
-        median = np.median(points, axis=0)
-
-        # calculate the absolute difference of each data point to the calculated median
-        deviation = np.abs(points - median)
-        print("median = ", median)
-        print("deviation: ", deviation)
-        print("np.median(deviation): ", np.median(deviation))
-
-        # take the median of those absolute differences
-        med_abs_deviation = np.median(deviation)
-
-        # 0.6745 is the 0.75th quartile of the standard normal distribution,
-        # to which the MAD converges.
-        modified_z_score = 0.6745 * deviation / med_abs_deviation
-
-        # return as extra information what the original mse value was at which the threshold is hit
-        # need to find a way to compute this mathematically, but I'll just use the index of the nearest candidate for now
-        idx = (np.abs(modified_z_score - threshold)).argmin()
-
-        if idx >= len(points):
-            idx = np.argmin(points)
-
-        threshold_value = points[idx]
-
-        return modified_z_score, threshold_value
+    # def word2idx(self, word_model, word):
+    #     try:
+    #         return word_model.wv.vocab[word].index
+    #         # If word is not in index return 0. I realize this means that this
+    #         # is the same as the word of index 0 (i.e. most frequent word), but 0s
+    #         # will be padded later anyway by the embedding layer (which also
+    #         # seems dirty but I couldn't find a better solution right now)
+    #     except KeyError:
+    #         return 0
+    #
+    # def idx2word(self, word_model, idx):
+    #     return word_model.wv.index2word[idx]
+    #
+    #
+    # def detect_mad_outliers(self, points, threshold=3.5):
+    #     # calculate the median of the input array
+    #     median = np.median(points, axis=0)
+    #
+    #     # calculate the absolute difference of each data point to the calculated median
+    #     deviation = np.abs(points - median)
+    #     print("median = ", median)
+    #     print("deviation: ", deviation)
+    #     print("np.median(deviation): ", np.median(deviation))
+    #
+    #     # take the median of those absolute differences
+    #     med_abs_deviation = np.median(deviation)
+    #
+    #     # 0.6745 is the 0.75th quartile of the standard normal distribution,
+    #     # to which the MAD converges.
+    #     modified_z_score = 0.6745 * deviation / med_abs_deviation
+    #
+    #     # return as extra information what the original mse value was at which the threshold is hit
+    #     # need to find a way to compute this mathematically, but I'll just use the index of the nearest candidate for now
+    #     idx = (np.abs(modified_z_score - threshold)).argmin()
+    #
+    #     if idx >= len(points):
+    #         idx = np.argmin(points)
+    #
+    #     threshold_value = points[idx]
+    #
+    #     return modified_z_score, threshold_value
 
 
 if __name__ == "__main__":
@@ -151,8 +151,8 @@ if __name__ == "__main__":
     # Preprocessing the dataset
     # preprocessor = Preprocessor('../data/dataset2.json', True, visualize=False)
     # df = preprocessor.load_data_supervised('../data/dataset2.json')
-    preprocessor = Preprocessor('../data/dataset2.json', True, visualize=False)
-    df = preprocessor.load_data_supervised('../data/dataset2.json')
+    preprocessor = Preprocessor('../data/dataset_100k.json', True, visualize=False)
+    df = preprocessor.load_data_supervised('../data/dataset_100k.json')
     df_copy = df.copy()
     messages = df['messages'].values
 
