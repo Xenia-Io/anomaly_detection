@@ -25,18 +25,15 @@ class Tester():
 
     def comparisons(self):
 
+        # Data preprocessing
         preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
-        preprocessor.preprocessing(umap=True)
-        print("x_all shape passed in: ", preprocessor.x_all.shape)
+        preprocessor.preprocessing(umap=True, pca=False)
 
-        # Settings
         n_samples = preprocessor.x_all.shape[0]
         outliers_fraction = 0.15
         n_outliers = int(outliers_fraction * n_samples)
-        n_inliers = n_samples - n_outliers
 
         print('Starting fitting Models')
-
         anomaly_algorithms = [
             ("Robust covariance", EllipticEnvelope(contamination=outliers_fraction)),
             ("One-Class SVM", svm.OneClassSVM(nu=outliers_fraction, kernel="rbf",
@@ -52,17 +49,10 @@ class Tester():
         xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.2),
                              np.arange(y_min, y_max, 0.2))
 
-        # plt.figure(figsize=(len(anomaly_algorithms) * 3 + 5, 12.5))
         plt.figure(figsize=(2, 2))
-        # plt.subplots_adjust(left=.02, right=.98, bottom=.001, top=.96, wspace=.05,
-        #                     hspace=.01)
-
         plot_num = 1
         rng = np.random.RandomState(42)
 
-        # Add outliers
-        # X = np.concatenate([preprocessor.x_all, rng.uniform(low=-6, high=6,
-        #                                    size=(n_outliers, 2))], axis=0)
         X = preprocessor.x_all
         for name, model in anomaly_algorithms:
             t0 = time.time()
@@ -77,9 +67,7 @@ class Tester():
             else:
                 y_pred = model.fit(X).predict(X)
 
-            # plot the levels lines and the points
             if name != "Local Outlier Factor":  # LOF does not implement predict
-                # Z = model.decision_function(xy).reshape(XX.shape)
                 Z = model.predict(np.c_[xx.ravel(), yy.ravel()])
                 Z = Z.reshape(xx.shape)
                 plt.contour(xx, yy, Z, levels=[0], linewidths=2, colors='black')
@@ -98,26 +86,25 @@ class Tester():
 
         plt.show()
 
-    def run_isoForest_version2(self, umap=False, tsne=False, pca=False):
+
+    def run_isoForest(self, umap=False, tsne=False, pca=False):
 
         # Data preprocessing
         preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
         preprocessor.preprocessing(umap=umap, tsne=tsne, pca=pca)
 
-        # build dataframe from all data points in the given dataset
+        # Build dataframe from all data points in the given dataset
         x_all_array = np.asarray(preprocessor.x_all)
         df = pd.DataFrame({'x0': x_all_array[:, 0], 'x1': x_all_array[:, 1]})
         to_model_columns = df.columns[0:2]
 
         # Build, train and test Classifier
-        clf = IsolationForest(contamination=0.03, n_estimators=100, warm_start=True, max_samples=100)
+        clf = IsolationForest(contamination=0.05, n_estimators=100, warm_start=True, max_samples=100)
         clf.fit(df[to_model_columns])
         pred = clf.predict(df[to_model_columns])
-
         cluster_labels = clf.fit_predict(df[to_model_columns])
 
-        # The silhouette_score gives the average value for all the samples.
-        # This gives a perspective into the density and separation of the formed clusters
+        # Results Evaluation
         silhouette_avg = silhouette_score(list(df[to_model_columns].values), cluster_labels)
         ch_score = calinski_harabasz_score(list(df[to_model_columns].values), cluster_labels)
         db_score = davies_bouldin_score(list(df[to_model_columns].values), cluster_labels)
@@ -136,14 +123,33 @@ class Tester():
         # Plot predictions of the model
         fig, ax = plt.subplots(figsize=(8, 8))
 
-        # plotting data
-        ax.scatter(df.iloc[:, 0], df.iloc[:, 1], c='green',
-                         s=20, label="normal points")
-        ax.scatter(df.iloc[outlier_index, 0], df.iloc[outlier_index, 1], c='green', s=20, edgecolor="red",
-                         label="predicted outliers")
-
         # storing it to be displayed later
         plt.legend(loc='best')
+
+        # plot the line, the samples, and the nearest vectors to the plane
+        x_min, x_max = preprocessor.x_train[:, 1].min() - 2, preprocessor.x_train[:, 1].max() + 5
+        y_min, y_max = preprocessor.x_test[:, 0].min() - 3, preprocessor.x_test[:, 0].max() + 5
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, 1.0),
+                             np.arange(y_min, y_max, 1.0))
+
+        Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
+        plt.contourf(xx, yy, Z, cmap=plt.cm.Blues_r)
+
+        # Plotting input data and predictions
+        b1 = plt.scatter(df.iloc[:, 0], df.iloc[:, 1], c='green',
+                        s=20, label="normal points")
+        b2 = plt.scatter(df.iloc[outlier_index, 0], df.iloc[outlier_index, 1], c='green', s=20, edgecolors='red',
+                        label="predicted outliers")
+
+        plt.axis('tight')
+        plt.yticks(fontsize=20)
+        plt.xticks(fontsize=20)
+        plt.xlim((-2, 4))
+        plt.ylim((-3, 17))
+        plt.legend([b1, b2],
+                   ["Clean  observations", "Fraud  observations"],
+                   loc="lower right", fontsize=18)
+
         if pca:
             plt.title('Outliers prediction for clean and fraud instances using PCA')
         elif tsne:
@@ -154,76 +160,16 @@ class Tester():
         plt.show()
 
 
-    def run_isoForest(self):
-        """
-        https://medium.com/@often_weird/isolation-forest-algorithm-for-anomaly-detection-f88af2d5518d
-        :return:
-        """
-        preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
-        preprocessor.preprocessing(pca=True)
-        print("x_all shape passed in iForest model: ", preprocessor.x_all.shape)
-
-        print('Starting fitting Isolation Forests')
-        model = IsolationForest(contamination=0.03, n_estimators=10, warm_start=True, max_samples=100)
-        cluster_labels = model.fit_predict(preprocessor.x_all)
-
-        # The silhouette_score gives the average value for all the samples.
-        # This gives a perspective into the density and separation of the formed clusters
-        silhouette_avg = silhouette_score(preprocessor.x_all, cluster_labels)
-        # CH criterion is most suitable in case when clusters are more
-        # or less spherical and compact in their middle
-        # the higher, the better
-        ch_score = calinski_harabasz_score(preprocessor.x_all, cluster_labels)
-        db_score = davies_bouldin_score(preprocessor.x_all, cluster_labels)
-        print("The average silhouette_score is :", silhouette_avg)
-        print("The average calinski_harabasz_score is: ", ch_score)
-        print("The average davies_bouldin_score is: ", db_score)
-
-        # Compute the silhouette scores for each sample: shape=(350,)
-        sample_silhouette_values = silhouette_samples(preprocessor.x_all, cluster_labels)
-        print("sample_silhouette_values: " , sample_silhouette_values.shape)
-
-        # Plot decision lines
-        model.fit(preprocessor.x_train)
-        y_pred_train = model.predict(preprocessor.x_train)
-        y_pred_test = model.predict(preprocessor.x_test)
-
-        # plot the line, the samples, and the nearest vectors to the plane
-        x_min, x_max = preprocessor.x_train[:, 1].min() - 1, preprocessor.x_train[:, 1].max() + 1
-        y_min, y_max = preprocessor.x_test[:, 0].min() - 1, preprocessor.x_test[:, 0].max() + 1
-        xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),
-                             np.arange(y_min, y_max, 0.1))
-
-        Z = model.decision_function(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
-
-        plt.title("IsolationForest on X features")
-        plt.contourf(xx, yy, Z, cmap=plt.cm.Blues_r)
-        b1 = plt.scatter(preprocessor.x_train[:, 0], preprocessor.x_train[:, 1], c='red')
-        b2 = plt.scatter(preprocessor.x_test[:, 0], preprocessor.x_test[:, 1], c='green')
-
-        plt.axis('tight')
-        plt.xlim((-5, 5))
-        plt.ylim((-5, 5))
-        plt.legend([b1, b2],
-                   ["X_training observations", "X_testing observations"],
-                   loc="lower right")
-        plt.show()
-
     def run_kMedians(self):
         print('Starting fitting K-Medians model')
         preprocessor = Preprocessor(self.filename, self.is_supervised, self.visualize)
         preprocessor.preprocessing(pca=True)
-        print("preprocessor.x_all.shape : ", preprocessor.x_all.shape)
 
         # Use silhouette score
         range_n_clusters = [2, 3, 4, 5, 6, 10, 20, 30, 40, 50, 67]
         davies_bouldin_scores = list()
         silhouette_scores = list()
         ch_score = list()
-
-        print("Number of clusters: ", range_n_clusters)
-        print("Random sample 499 from x_all: ", preprocessor.x_all[499])
-        print("Shape of x_all passed in the model: ", preprocessor.x_all.shape)
 
         for n_clusters in range_n_clusters:
 
@@ -240,17 +186,12 @@ class Tester():
             clusterer = KMedians(k=int(n_clusters))
             clusterer.fit(preprocessor.x_all)
             cluster_labels = clusterer.labels_
-            # print("cluster_labels : ", cluster_labels)
 
             # The silhouette_score gives the average value for all the samples.
             silhouette_avg = silhouette_score(preprocessor.x_all, cluster_labels)
             silhouette_scores.append(round(silhouette_score(preprocessor.x_all, cluster_labels), 2))
             ch_score.append(round(calinski_harabasz_score(preprocessor.x_all, cluster_labels), 2))
             davies_bouldin_scores.append(round(davies_bouldin_score(preprocessor.x_all, cluster_labels), 2))
-
-            print("Till n =", n_clusters," the silhouette score list is :", silhouette_scores)
-            print("Till n =", n_clusters," the average calinski_harabasz score list is :", ch_score)
-            print("Till n =", n_clusters," the average davies_bouldin score list is:", davies_bouldin_scores)
 
             # Compute the silhouette scores for each sample
             sample_silhouette_values = silhouette_samples(preprocessor.x_all, cluster_labels)
@@ -278,14 +219,16 @@ class Tester():
                 y_lower = y_upper + 10  # 10 for the 0 samples
 
             ax1.set_title("The silhouette plot for the various clusters.")
-            ax1.set_xlabel("The silhouette coefficient values")
-            ax1.set_ylabel("Cluster label")
+            ax1.set_xlabel("The silhouette coefficient values", fontsize=16)
+            ax1.set_ylabel("Cluster label", fontsize=16)
+            ax1.xaxis.set_tick_params(labelsize=18)
+            ax1.yaxis.set_tick_params(labelsize=18)
 
             # The vertical line for average silhouette score of all the values
             ax1.axvline(x=silhouette_avg, color="red", linestyle="--")
 
             ax1.set_yticks([])  # Clear the yaxis labels / ticks
-            ax1.set_xticks([-0.5, -0.1, 0, 0.2, 0.4, 0.6, 0.8, 1])
+            ax1.set_xticks([-0.5, -0.2, 0, 0.2, 0.4, 0.6, 0.8, 1])
 
             # 2nd Plot showing the actual clusters formed
             colors = cm.nipy_spectral(cluster_labels.astype(float) / n_clusters)
@@ -294,7 +237,7 @@ class Tester():
 
             # Labeling the clusters
             centers = clusterer.cluster_centers_
-            # print(type(centers), len(centers), centers)
+
             # Draw white circles at cluster centers
             ax2.scatter(centers[:, 0], centers[:, 1], marker='o',
                         c="white", alpha=1, s=200, edgecolor='k')
@@ -304,9 +247,10 @@ class Tester():
                             s=50, edgecolor='k')
 
             ax2.set_title("The visualization of the clustered data.")
-            ax2.set_xlabel("Feature space for the 1st feature")
-            ax2.set_ylabel("Feature space for the 2nd feature")
-
+            ax2.set_xlabel("Feature space for the 1st feature", fontsize=16)
+            ax2.set_ylabel("Feature space for the 2nd feature", fontsize=16)
+            ax2.xaxis.set_tick_params(labelsize=18)
+            ax2.yaxis.set_tick_params(labelsize=18)
             plt.suptitle(("Silhouette analysis for KMedians clustering on sample data "
                           "with n_clusters = %d" % n_clusters),
                          fontsize=14, fontweight='bold')
@@ -315,7 +259,7 @@ class Tester():
         print("The calinski_harabasz scores are :", ch_score)
         print("The davies_bouldin scores are :", davies_bouldin_scores)
 
-        # plt.show()
+        plt.show()
 
         self.compare_scores(silhouette_scores, ch_score, davies_bouldin_scores, range_n_clusters)
 
@@ -325,12 +269,7 @@ class Tester():
         preprocessor.preprocessing()
 
         print('Starting fitting K-Means model')
-        # Use silhouette score
         range_n_clusters = [2, 3, 4, 5, 6, 10, 20, 30, 40, 50, 67]
-
-        print("Number of clusters: ", range_n_clusters)
-        print("Random sample 499 from x_all: ", preprocessor.x_all[499])
-        print("Shape of x_all passed in the model: ", preprocessor.x_all.shape)
 
         for n_clusters in range_n_clusters:
 
@@ -346,7 +285,6 @@ class Tester():
             # Initialize with n_clusters and a random generator seed for reproducibility
             clusterer = KMeans(n_clusters=n_clusters, random_state=10)
             cluster_labels = clusterer.fit_predict(preprocessor.x_all)
-            # print("cluster_labels : ", cluster_labels)
 
             # The silhouette_score gives the average value for all the samples.
             silhouette_avg = silhouette_score(preprocessor.x_all, cluster_labels)
@@ -382,8 +320,8 @@ class Tester():
                 y_lower = y_upper + 10  # 10 for the 0 samples
 
             ax1.set_title("The silhouette plot for the various clusters.")
-            ax1.set_xlabel("The silhouette coefficient values")
-            ax1.set_ylabel("Cluster label")
+            ax1.set_xlabel("The silhouette coefficient values", fontsize=16)
+            ax1.set_ylabel("Cluster label", fontsize=16)
 
             # The vertical line for average silhouette score of all the values
             ax1.axvline(x=silhouette_avg, color="red", linestyle="--")
@@ -398,7 +336,7 @@ class Tester():
 
             # Labeling the clusters
             centers = clusterer.cluster_centers_
-            # print(type(centers), len(centers), centers)
+
             # Draw white circles at cluster centers
             ax2.scatter(centers[:, 0], centers[:, 1], marker='o',
                         c="white", alpha=1, s=200, edgecolor='k')
@@ -408,8 +346,8 @@ class Tester():
                             s=50, edgecolor='k')
 
             ax2.set_title("The visualization of the clustered data.")
-            ax2.set_xlabel("Feature space for the 1st feature")
-            ax2.set_ylabel("Feature space for the 2nd feature")
+            ax2.set_xlabel("Feature space for the 1st feature", fontsize=16)
+            ax2.set_ylabel("Feature space for the 2nd feature", fontsize=16)
 
             plt.suptitle(("Silhouette analysis for KMeans clustering on sample data "
                           "with n_clusters = %d" % n_clusters),
@@ -463,12 +401,11 @@ class Tester():
         par1.tick_params(axis='y', colors=p2.get_color(), **tkw)
         par2.tick_params(axis='y', colors=p3.get_color(), **tkw)
         host.tick_params(axis='x', **tkw)
-
         lines = [p1, p2, p3]
 
-        host.legend(lines, [l.get_label() for l in lines])
+        host.legend(lines, [l.get_label() for l in lines], loc="upper right")
+        plt.yticks(fontsize=14)
+        plt.xticks(fontsize=14)
 
         plt.draw()
         plt.show()
-
-

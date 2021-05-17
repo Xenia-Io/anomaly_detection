@@ -34,7 +34,7 @@ class FeatureExtractor():
         print(df_countvect)
 
         # Print the vector representation for a log message (print 1 row from df)
-        print(df_countvect.loc[[20500]])
+        print("DEBUG_0 : " ,df_countvect.loc[[20500]])
 
         # Get the first position of the maximum value for each word
         m = df_countvect.ne(0).idxmax()

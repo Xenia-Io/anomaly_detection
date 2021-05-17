@@ -42,7 +42,7 @@ def tsne_scatter(features, labels, dimensions=2, RANDOM_SEED=42):
     features_embedded = TSNE(n_components=dimensions, random_state=RANDOM_SEED).fit_transform(list(features))
 
     # initialising the plot
-    fig, ax = plt.subplots(figsize=(8, 8))
+    fig, ax = plt.subplots(figsize=(8, 10))
 
     # counting dimensions
     if dimensions == 3: ax = fig.add_subplot(111, projection='3d')
@@ -52,7 +52,7 @@ def tsne_scatter(features, labels, dimensions=2, RANDOM_SEED=42):
         *zip(*features_embedded[np.where(labels == 1)]),
         marker='o',
         color='r',
-        s=20,
+        s=50,
         alpha=0.99,
         label='Fraud'
     )
@@ -60,14 +60,16 @@ def tsne_scatter(features, labels, dimensions=2, RANDOM_SEED=42):
         *zip(*features_embedded[np.where(labels == 0)]),
         marker='o',
         color='g',
-        s=20,
+        s=10,
         alpha=0.99,
         label='Clean'
     )
 
-    # storing it to be displayed later
-    plt.legend(loc='best')
+    # Show results
     plt.title('TSNE representation of clean and fraud instances')
+    plt.legend(loc='best', fontsize=22)
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
     plt.show()
 
 
@@ -89,7 +91,7 @@ def umap_scatter(features, labels, dimensions=2):
         *zip(*features_embedded[np.where(labels == 1)]),
         marker='o',
         color='r',
-        s=10,
+        s=37,
         alpha=0.99,
         label='Fraud'
     )
@@ -102,9 +104,9 @@ def umap_scatter(features, labels, dimensions=2):
         label='Clean'
     )
 
-    # storing it to be displayed later
-    plt.legend(loc='best')
+    # Show results
     plt.title('UMAP representation for clean and fraud instances')
+    plt.legend(loc='best', fontsize=29)
     plt.show()
 
 
@@ -116,7 +118,7 @@ def pca_scatter(features, labels, dimensions=2):
     features_embedded = PCA(n_components=dimensions).fit_transform(list(features))
 
     # initialising the plot
-    fig, ax = plt.subplots(figsize=(8, 8))
+    fig, ax = plt.subplots(figsize=(8, 10))
 
     # counting dimensions
     if dimensions == 3: ax = fig.add_subplot(111, projection='3d')
@@ -126,7 +128,7 @@ def pca_scatter(features, labels, dimensions=2):
         *zip(*features_embedded[np.where(labels == 1)]),
         marker='o',
         color='r',
-        s=10,
+        s=55,
         alpha=0.99,
         label='Fraud'
     )
@@ -139,16 +141,15 @@ def pca_scatter(features, labels, dimensions=2):
         label='Clean'
     )
 
-    # storing it to be displayed later
-    plt.legend(loc='best')
+    # Show results
     plt.title('PCA representation for clean and fraud instances')
+    plt.legend(loc='best', fontsize=22)
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
     plt.show()
 
 
-
 def build_NLP_model(messages):
-    # w2v_model = gensim.models.Word2Vec(size=200, window=5, min_count=1, workers=10)
-    # 64 is the maxlen
     w2v_model = gensim.models.Word2Vec(size=64, window=5, min_count=1, workers=10)
     t = time()
 
@@ -363,4 +364,3 @@ class SequenceIterator:
             words = np.array([self.word2idx(self.word_model, w) for w in news.split(' ')[:self.seq_length] if w != ''])
 
             yield (words, cat)
-

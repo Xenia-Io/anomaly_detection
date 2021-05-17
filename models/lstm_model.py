@@ -1,8 +1,5 @@
-from tensorflow.keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-from kerastuner.engine.hyperparameters import HyperParameters
+from tensorflow.keras.layers import Dense, LSTM, Embedding, Dropout, Activation
 from tensorflow.keras.models import Model, Sequential
-from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.metrics import classification_report
 from sklearn.metrics import roc_curve, auc
 from pre_processor import Preprocessor
@@ -11,20 +8,14 @@ from kerastuner import HyperModel
 from sklearn import metrics
 import kerastuner as kt
 import tensorflow as tf
-import seaborn as sns
-import pandas as pd
-import numpy as np
-import gensim
 from utils import *
-
-from sklearn.metrics import classification_report, confusion_matrix
 
 sns.set(style='whitegrid', context='notebook')
 
 
 class LSTM_Model(HyperModel):
 
-    def __init__(self, pretrained_weights, vocab_size, epochs=15, optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,
+    def __init__(self, pretrained_weights, vocab_size, epochs=30, optimizer='adam', loss='mae', batch_size=0, kernel_init=0, gamma=0,
                  epsilon=0, w_decay=0, momentum=0, dropout=0, embed_size=300, max_features=10000, maxlen=200):
         """
         Credits to: https://gist.github.com/maxim5/c35ef2238ae708ccb0e55624e9e0252b
@@ -48,17 +39,7 @@ class LSTM_Model(HyperModel):
         self.pretrained_weights = pretrained_weights
 
 
-
     def build(self, hp):
-
-        def get_f1(y_true, y_pred):  # taken from old keras source code
-            true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-            possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
-            predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
-            precision = true_positives / (predicted_positives + K.epsilon())
-            recall = true_positives / (possible_positives + K.epsilon())
-            f1_val = 2 * (precision * recall) / (precision + recall + K.epsilon())
-            return f1_val
 
         def recall_m(y_true, y_pred):
             true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
@@ -90,57 +71,12 @@ class LSTM_Model(HyperModel):
         model.add(Dense(units=2))
         model.add(Activation('softmax'))
 
-        # hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-5, 1e-4])
-        hp.Choice('learning_rate', values=[1e-3, 1e-4])
-        # optimizer = hp.Choice('optimizer', ['adam', 'adagrad', 'sgd', 'rmsprop', 'adadelta'])
-        optimizer = hp.Choice('optimizer', ['adam'])
+        hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-5, 1e-4])
+        optimizer = hp.Choice('optimizer', ['adam', 'adagrad', 'sgd', 'rmsprop', 'adadelta'])
 
         model.compile(optimizer, loss='binary_crossentropy', metrics=['acc', f1_m, precision_m, recall_m])
 
         return model
-
-
-    # def word2idx(self, word_model, word):
-    #     try:
-    #         return word_model.wv.vocab[word].index
-    #         # If word is not in index return 0. I realize this means that this
-    #         # is the same as the word of index 0 (i.e. most frequent word), but 0s
-    #         # will be padded later anyway by the embedding layer (which also
-    #         # seems dirty but I couldn't find a better solution right now)
-    #     except KeyError:
-    #         return 0
-    #
-    # def idx2word(self, word_model, idx):
-    #     return word_model.wv.index2word[idx]
-    #
-    #
-    # def detect_mad_outliers(self, points, threshold=3.5):
-    #     # calculate the median of the input array
-    #     median = np.median(points, axis=0)
-    #
-    #     # calculate the absolute difference of each data point to the calculated median
-    #     deviation = np.abs(points - median)
-    #     print("median = ", median)
-    #     print("deviation: ", deviation)
-    #     print("np.median(deviation): ", np.median(deviation))
-    #
-    #     # take the median of those absolute differences
-    #     med_abs_deviation = np.median(deviation)
-    #
-    #     # 0.6745 is the 0.75th quartile of the standard normal distribution,
-    #     # to which the MAD converges.
-    #     modified_z_score = 0.6745 * deviation / med_abs_deviation
-    #
-    #     # return as extra information what the original mse value was at which the threshold is hit
-    #     # need to find a way to compute this mathematically, but I'll just use the index of the nearest candidate for now
-    #     idx = (np.abs(modified_z_score - threshold)).argmin()
-    #
-    #     if idx >= len(points):
-    #         idx = np.argmin(points)
-    #
-    #     threshold_value = points[idx]
-    #
-    #     return modified_z_score, threshold_value
 
 
 if __name__ == "__main__":
@@ -157,10 +93,8 @@ if __name__ == "__main__":
     messages = df['messages'].values
 
     for i in range(messages.shape[0]):
-        # print("i: ", i, " with message: ", messages[i])
         messages[i] = ''.join([i for i in messages[i] if not i.isdigit()])
         messages[i] = gensim.utils.simple_preprocess (messages[i])
-        # print("i: ", i, " with message: ", messages[i])
 
     w2v_model, pretrained_weights, vocab_size, emdedding_size = build_NLP_model(messages)
     # test_NLP_model(w2v_model)
@@ -171,57 +105,32 @@ if __name__ == "__main__":
 
     # Compile model
     lstm = LSTM_Model(pretrained_weights, vocab_size)
-    # model_ = lstm.build_lstm(train_x, vocab_size, emdedding_size, pretrained_weights)
-
-    # tuner = kt.tuners.RandomSearch(
-    #     lstm,
-    #     objective='val_loss',
-    #     max_trials=4,
-    #     directory='my_dir')
 
     tuner = kt.tuners.Hyperband(
         lstm,
         objective='val_loss',
         max_epochs=2,
-        directory='my_dir')
-
-    # tuner = kt.tuners.BayesianOptimization(
-    #         lstm,
-    #         objective='val_loss',
-    #         max_trials=10,
-    #         seed=42,
-    #         executions_per_trial=5,
-    #         directory='my_dir'
-    #     )
+        directory='my_dir_100k')
 
     # use one-hot labels
-    train_y_onehot = (np.eye(2)[train_y]) # shape = (5956, 2)
-    val_y_onehot = (np.eye(2)[val_y])     # shape = (1050, 2)
-    test_y_onehot = (np.eye(2)[test_y])   # shape = (3006, 2)
+    train_y_onehot = (np.eye(2)[train_y])
+    val_y_onehot = (np.eye(2)[val_y])
+    test_y_onehot = (np.eye(2)[test_y])
 
-    tuner.search(train_x, train_y_onehot,
-                 validation_data=(val_x, val_y_onehot),
-                 epochs=2)
+    tuner.search(train_x, train_y_onehot, validation_data=(val_x, val_y_onehot), epochs=2)
 
     best_model = tuner.get_best_models(1)[0]
     best_hyperparameters = tuner.get_best_hyperparameters(1)[0]
     print("Tuner summary: ", tuner.results_summary())
     print("Best trial: ", tuner.oracle.get_best_trials(num_trials=2)[0].hyperparameters.values)
-
-    print("Best model summary:")
-    best_model.summary()
     print("best optimizer : ", best_hyperparameters.get('optimizer'))
     print("best learning_rate: ", best_hyperparameters.get('learning_rate'))
-    print("test_x.shape: ", test_x.shape)
-    # exit(0)
+    print("Best model summary:")
+    best_model.summary()
 
     # Visualization
     visualise_data(set_x, set_x_test, set_y, set_y_test, tsne=False, pca=False, umap=False)
 
-    # dot_img_file = 'model_2_lstm.png'
-    # tf.keras.utils.plot_model(model_, to_file=dot_img_file, show_shapes=True)
-    # early_stopping = EarlyStopping()
-    print("Sample input : ", train_x[0].shape, train_x[0])
     # Train the model
     history = best_model.fit(
         train_x, train_y_onehot,
@@ -247,49 +156,30 @@ if __name__ == "__main__":
 
     plt.show()
 
-    # exit(0)
-
     # Test the model
-    # scores = best_model.evaluate(test_x, test_y_onehot, verbose=0)
-    # loss_train, accuracy_train = best_model.evaluate(train_x, train_y_onehot, verbose=False)
-    # print("Training Accuracy: {:.4f}".format(accuracy_train))
-    # loss_test, accuracy_test = best_model.evaluate(test_x, test_y_onehot, verbose=False)
-    # print("Testing Accuracy:  {:.4f}".format(accuracy_test))
-    # print("Percentage of Test Accuracy: %.2f%%" % (scores[1] * 100))
-
+    scores = best_model.evaluate(test_x, test_y_onehot, verbose=0)
+    loss_train, accuracy_train, _,_,_ = best_model.evaluate(train_x, train_y_onehot, verbose=False)
+    print("Training Accuracy: {:.4f}".format(accuracy_train))
+    loss_test, accuracy_test, _, _, _= best_model.evaluate(test_x, test_y_onehot, verbose=False)
+    print("Testing Accuracy:  {:.4f}".format(accuracy_test))
+    print("Percentage of Test Accuracy: %.2f%%" % (scores[1] * 100))
 
     predictions = best_model.predict(test_x)
-
-    print("Shape of predictions and test_y: ", predictions.shape, test_y_onehot.shape)
     predictions = tf.one_hot(tf.argmax(predictions, axis=1), depth=2)
 
-    corrects_ = 0
-    for i in range(len(test_y_onehot)):
-        if((test_y_onehot[i] == tf.keras.backend.get_value(predictions[i])).all()):
-            # print(test_y_onehot[i], "  - target // ", tf.keras.backend.get_value(predictions[i]), " - prediction")
-
-            corrects_ = corrects_ + 1
-        else:
-            print(type(test_y_onehot[i]))
-            print("prediction is wrong in position ", i, " with prediction: ", \
-            tf.keras.backend.get_value(predictions[i]), " and target " ,test_y_onehot[i])
-
-    print("correct predictions = ", corrects_ , " totall = ", len(test_y_onehot))
-    accuracy_test_ = round((corrects_ / len(test_y_onehot))*100, 4)
-    print("Test accuracy: ", accuracy_test_, "%")
-
-    # evaluate the model
+    # Evaluate the model
     loss, accuracy, f1_score, precision, recall = best_model.evaluate(test_x, test_y_onehot, verbose=0)
 
     print("\n ************ Print test metrics ************ \n")
-    print("F1-score: ", round(f1_score*100, 2), "%")
-    print("Precision: ", round(precision*100, 2), "%")
-    print("Recall: ", round(recall*100, 2), "%")
-    print("Loss: ", round(loss*100, 2), "%")
-    print("Accuracy: ", round(accuracy*100, 2), "%")
+    print("F1-score: ", round(f1_score*100, 6), "%")
+    print("Precision: ", round(precision*100, 6), "%")
+    print("Recall: ", round(recall*100, 6), "%")
+    print("Loss: ", round(loss*100, 6), "%")
+    print("Accuracy: ", round(accuracy*100, 6), "%")
 
-    # initialize the label names
+    # Initialize the label names
     labelNames = ["clean", "anomalies"]
+
     # Classification report
     print(classification_report(test_y_onehot, predictions,
                                 target_names=labelNames))

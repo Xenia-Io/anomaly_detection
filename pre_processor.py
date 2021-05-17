@@ -1,17 +1,10 @@
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.preprocessing import Normalizer, MinMaxScaler
-from sklearn.model_selection import train_test_split
-from mpl_toolkits.mplot3d import axes3d, Axes3D
+from sklearn.preprocessing import StandardScaler
 from feature_extractor import FeatureExtractor
-from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
-from keras.utils import to_categorical
 from sklearn.utils import shuffle
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import seaborn as sns
 from umap import UMAP
 import pandas as pd
@@ -19,6 +12,7 @@ import numpy as np
 import time
 import json
 import re
+
 
 class Preprocessor():
 
@@ -33,7 +27,7 @@ class Preprocessor():
             self.x_all_trans_no_pca = []
 
 
-    def preprocessing(self, pca=False, tsne=False, umap=False, printing=False):
+    def preprocessing(self, pca=False, tsne=False, umap=False):
 
         feature_extractor = FeatureExtractor()
         self.x_all = feature_extractor.fit_transform(self.x_all)
@@ -41,21 +35,11 @@ class Preprocessor():
         self.x_test = feature_extractor.fit_transform(self.x_test)
         self.x_all_trans_no_pca = np.copy(self.x_all)
 
-        if printing:
-            print("-------- AFTER FEATURE EXTRACTION ------------")
-            print("Shape of x_all : ", self.x_all.shape)
-            print("Shape of x_test : ", self.x_test.shape)
-            print("Shape of copied and un-transformed x_all : ", self.x_all_trans_no_pca.shape)
-            print("Sample of copied and un-transformed x_all: ", self.x_all_trans_no_pca[0])
-            print("Sample of x_all (no PCA applied in x_all till now though): ", self.x_all[0])
-
         # Apply dimensionality reduction
         scaler = StandardScaler()
         self.x_all = scaler.fit_transform(self.x_all)
         self.x_train = scaler.fit_transform(self.x_train)
         self.x_test = scaler.fit_transform(self.x_test)
-
-        print("is supervised ? : " , self.supervised)
 
         if pca or tsne or umap:
             self.x_all = self.apply_Dim_Reduction(self.x_all, apply_pca=pca, apply_tSNE=tsne, apply_umap=umap)
@@ -101,14 +85,12 @@ class Preprocessor():
         plt.show()
 
 
-    def load_data_supervised(self, log_file, printing=False):
+    def load_data_supervised(self, log_file):
         print('====== Start loading the data ======')
 
         if log_file.endswith('.json'):
             with open(log_file) as json_file:
                 data = json.load(json_file)
-
-                # construct list of '_sources'
                 dict_of_lists = {}
                 messages = []
                 labels = []
@@ -145,12 +127,6 @@ class Preprocessor():
             # Replace categorical clean/fraud with 0/1
             df = df.replace({'labels': numerical_mapping})
 
-            if printing:
-                print("Number of log messages in the dataset: ", df.shape[0])
-                print("Value counts for clean and fraud samples:\n", df.labels.value_counts())
-                print(df[df.labels==1].head(6))
-                print("Percentage of fraudulent logs:{}%".format(round((sum(df.labels == 1) * 100/len(df.labels)), 4)))
-
             if self.visualize:
                 self.plot_wordcloud(df[df.labels == 0]["messages"], title="Word Cloud of normal messages")
                 self.plot_wordcloud(df[df.labels == 1]["messages"], title="Word Cloud of fraudulent messages")
@@ -164,8 +140,8 @@ class Preprocessor():
         else:
             raise NotImplementedError('Function only supports json files!')
 
-    def load_data(self, log_file, train_ratio=0.7, \
-                  split_type='sequential', save_csv=False, printing=False):
+
+    def load_data(self, log_file, train_ratio=0.7, split_type='sequential', save_csv=False):
         """ Load the logs into train and test data
         Arguments
         ---------
@@ -199,21 +175,11 @@ class Preprocessor():
 
             # Clean the messages from numbers and unwanted characters
             for i in range(x_data.shape[0]):
-                # print(i, x_data[i])
                 x_data[i] = re.sub("[\(\[].*?[\)\]]", "", x_data[i])
                 x_data[i] = re.sub("[!?',;.=:+#\-*^(<>)_/|\"\]]", " ", x_data[i])
                 x_data[i] = ''.join([i for i in x_data[i] if not i.isdigit()])
-                # print(i, x_data[i])
 
             data_df['message'] = x_data
-
-            if printing:
-                print("type of x_data: ", type(x_data))
-                print("length of x_data[0]: ", len(x_data[0]))
-                print("length of x_data[499]: ", len(x_data[499]))
-                print("shape of x_data: ", x_data.shape)
-                print("The keys of dataframe: ", data_df.keys())
-                print("data_df: ", (data_df))
 
             # Split train and test data - Shuffle train data
             (x_train, _), (x_test, _) = self._split_data(x_data, train_ratio=train_ratio)
@@ -222,8 +188,6 @@ class Preprocessor():
 
             if save_csv:
                 data_df.to_csv('data_instances.csv', index=False)
-
-            # print("Sum for train and test instances: ", x_train.sum(), x_test.sum())
 
             # Update dataframe after shuffling
             x_all_list = np.concatenate((x_train, x_test), axis=0)

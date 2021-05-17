@@ -536,4 +536,3 @@ if __name__ == "__main__":
     plt.title('Receiver operating characteristic example')
     plt.legend(loc="lower right")
     plt.show()
-
